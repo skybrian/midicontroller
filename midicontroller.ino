@@ -10,7 +10,7 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, midiDev, MID);
 
 midi::DataByte prevControlValue = -1;
 
-tachometer wheel;
+Tachometer wheel(22, A0);
 
 void sendControlChange(int value) {
   if (value < 0) value = 0;
@@ -33,7 +33,7 @@ void setup() {
   
   Serial.print("\nCalibrating...");
   Serial.flush();
-  wheel.calibrate();
+  wheel.begin();
 
   while( !USBDevice.mounted() ) delay(1);
   sendControlChange(0); 
@@ -45,15 +45,16 @@ elapsedMillis sincePrint;
 void loop() {
   MID.read();
 
-  tachometer::reading vals = wheel.read();
+  Tachometer::Reading vals = wheel.read();
   sendControlChange((int)vals.frequency);
   
   if (sincePrint >= 25) {
     sincePrint = 0;
     Serial.print(vals.rawV); Serial.print(", ");
+    Serial.print(vals.ambientV); Serial.print(", ");
     Serial.print(vals.smoothV); Serial.print(", ");
     Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
     Serial.println(vals.frequency);
   }
-  delay(1);
+  delayMicroseconds(500);
 }

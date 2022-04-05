@@ -5,16 +5,12 @@
 #include <elapsedMillis.h>
 
 // Converts a noisy pulse wave signal to a frequency in hertz.
-class tachometer {
+class Tachometer {
 
   // === Parameters.
 
-  // Time in seconds for calibration.
-  const float calibrationPeriod = 1000;
-
   // We use a high-pass-filter to center the signal around zero.
   const float minHertz = 0.2;
-  const float defaultOffset = 500;
 
   // The low-pass filter smooths the signal, removing high-frequency noise.
   const float maxHertz = 100;
@@ -26,18 +22,18 @@ class tachometer {
   // In milliseconds.
   const float tickAveragePeriod = 250;
 
-  // === The high-pass filter finds the center of the signal using a running average.
+  // === The high-pass filter centers the signal around 0, using a running average.
   
   float offset = 0;
 
   // Takes the latest voltage (v) and milliseconds since the previous read (deltaT).
   // Returns the voltage, subtracting an offset so that zero is in the middle.
-  // If deltaT is too high, the default offset will be used.
+  // If deltaT is too high, returns 0.
   float highPass(int v, int deltaT) {
     float weight = deltaT / (1000.0 / minHertz);
     if (weight > 1.0) weight = 1.0;
-    offset = (1.0 - weight) * offset + weight * (v - defaultOffset);
-    return v - offset - defaultOffset;
+    offset = (1.0 - weight) * offset + weight * v;
+    return v - offset;
   }
 
   // === The low-pass filter smooths the signal using a running average.
@@ -112,14 +108,24 @@ class tachometer {
 
     return 1000.0 * ticks / tickAveragePeriod;
   }
-  
+
+  // The pin to turn the LED on.
+  int lightPin;
+
+  // The analog pin to read the voltage from the phototransistor.
+  int readPin;
+
   elapsedMillis sinceRead;
 
 public:
 
-  struct reading {
-    // The last reading of the raw voltage signal, as returned by analogRead().
+  Tachometer(int ledPin, int sensorPin) : lightPin(ledPin), readPin(sensorPin) {}
+
+  struct Reading {
+    // The raw voltage signal, as returned by analogRead().
     int rawV;
+    // The raw voltage with the light turned off.
+    int ambientV;
     // The voltage after smoothing and centering around zero.
     float smoothV;
     // The voltage after converting to a binary signal.
@@ -130,37 +136,41 @@ public:
  
   // Reads the current pulse frequency.
   // If not called frequently enough, this will miss pulses and undercount. 
-  reading read() {
-    int rawV = analogRead(A0);
+  Reading read() {
+    Reading result;
+
+    result.ambientV = analogRead(readPin);
+    digitalWrite(lightPin, HIGH);
+    delayMicroseconds(100);
+    result.rawV = analogRead(readPin);
+    digitalWrite(lightPin, LOW);
+
     int deltaT = sinceRead;
     sinceRead = 0;
 
-    float centeredV = highPass((float)rawV, deltaT);
-    float smoothV = lowPass(centeredV, deltaT);
-    float f = findFrequency(crossed(smoothV), deltaT);
+    float centeredV = highPass((float)(result.rawV - result.ambientV), deltaT);
+    result.smoothV = lowPass(centeredV, deltaT);
 
-    reading result;
-
-    result.rawV = rawV;
-    result.smoothV = smoothV;
+    result.frequency = findFrequency(crossed(smoothV), deltaT);
     result.pulseHigh = pulseHigh;
-    result.frequency = f;
     
     return result;
   }
 
-  // Clears the filters and reads enough data to get them going again.
-  void calibrate() {  
-    float v = analogRead(A0);
-    offset = 0;
-    smoothV = v - defaultOffset;
-    pulseHigh = smoothV>0;
-        
+  // Clears the filters and waits until we get a pulse.
+  void begin() {
+    pinMode(lightPin, OUTPUT);
+    digitalWrite(lightPin, LOW);
     delay(1);
+    offset = analogRead(readPin);
+    smoothV = 0;
+    pulseHigh = false;
     
-    elapsedMillis sinceStart;
-    while (sinceStart < calibrationPeriod) {
-      read();
+    while (true) {
+      Reading val = read();
+      if (val.rawV > minPulseHeight) {
+        return;
+      }
       delay(1);
     }
   }
