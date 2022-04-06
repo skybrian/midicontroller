@@ -50,9 +50,9 @@ void loop() {
   
   if (sincePrint >= 25) {
     sincePrint = 0;
-    Serial.print(vals.rawV); Serial.print(", ");
-    Serial.print(vals.ambientV); Serial.print(", ");
-    Serial.print(vals.smoothV); Serial.print(", ");
+    // Serial.print(vals.ambientV); Serial.print(", ");
+    // Serial.print(vals.rawV); Serial.print(", ");
+    // Serial.print(vals.smoothV); Serial.print(", ");
     Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
     Serial.println(vals.frequency);
   }

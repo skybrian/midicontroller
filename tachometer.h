@@ -3,62 +3,41 @@
 
 #include <Arduino.h>
 #include <elapsedMillis.h>
+#include "filters.h"
 
 // Converts a noisy pulse wave signal to a frequency in hertz.
 class Tachometer {
 
   // === Parameters.
 
-  // We use a high-pass-filter to center the signal around zero.
   const float minHertz = 0.2;
 
-  // The low-pass filter smooths the signal, removing high-frequency noise.
+  // Amount of smoothing for the low-pass filter, removing high-frequency noise.
   const float maxHertz = 100;
 
-  // A pulse should be at least this high (peak to peak) to count as a tick.
-  const float minPulseHeight = 200.0;
+  // Amount of smoothing for ambient lighting.
+  const float maxAmbientHertz = 2;
+
+  // Expected amount of voltage change above ambient lighting.
+  const float pulseHeight = 500.0;
 
   // When counting ticks to compute the frequency, how much time to average over.
   // In milliseconds.
   const float tickAveragePeriod = 250;
 
-  // === The high-pass filter centers the signal around 0, using a running average.
-  
-  float offset = 0;
-
-  // Takes the latest voltage (v) and milliseconds since the previous read (deltaT).
-  // Returns the voltage, subtracting an offset so that zero is in the middle.
-  // If deltaT is too high, returns 0.
-  float highPass(int v, int deltaT) {
-    float weight = deltaT / (1000.0 / minHertz);
-    if (weight > 1.0) weight = 1.0;
-    offset = (1.0 - weight) * offset + weight * v;
-    return v - offset;
-  }
-
-  // === The low-pass filter smooths the signal using a running average.
-
-  float smoothV = 0;
-
-  // Takes the latest voltage (v) and milliseconds since previous read (deltaT).
-  // Returns the filtered voltage.
-  // If deltaT is too high, no filtering will be done.
-  float lowPass(int v, int deltaT) {
-    float weight = deltaT / (1000.0 / maxHertz);
-    if (weight > 1.0) weight = 1.0;
-    smoothV = (1.0 - weight) * smoothV + weight * v;
-    return smoothV;
-  }
+  // == Low pass filters to smooth the ambient and lit voltages.
+  LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz);
+  LowPassFilter smoothV = LowPassFilter(maxHertz);
 
   // === Finds when the pulse changed between low and high.
 
   bool pulseHigh;
 
   // Takes a voltage (v).
-  // Returns true if the voltage has changed between the high, middle, and low regions of the pulse.
+  // Returns true if the voltage has changed between the high and low regions of the pulse.
   bool crossed(int v) {
-    bool crossed = (pulseHigh && v < -minPulseHeight / 2) || (!pulseHigh && v > minPulseHeight / 2);
-    if (crossed) pulseHigh = v>0;
+    bool crossed = (pulseHigh && v < 0.4 * pulseHeight) || (!pulseHigh && v > 0.6 * pulseHeight);
+    if (crossed) pulseHigh = v > 0.5 * pulseHeight;
     return crossed;
   }
 
@@ -110,23 +89,23 @@ class Tachometer {
   }
 
   // The pin to turn the LED on.
-  int lightPin;
+  const int lightPin;
 
   // The analog pin to read the voltage from the phototransistor.
-  int readPin;
+  const int readPin;
 
-  elapsedMillis sinceRead;
+  elapsedMillis sinceReadV, sinceReadAmbient;
 
 public:
 
-  Tachometer(int ledPin, int sensorPin) : lightPin(ledPin), readPin(sensorPin) {}
+  Tachometer(const int ledPin, const int sensorPin) : lightPin(ledPin), readPin(sensorPin) {}
 
   struct Reading {
+    // The voltaage witht the LED turned off (smoothed).
+    int ambientV;
     // The raw voltage signal, as returned by analogRead().
     int rawV;
-    // The raw voltage with the light turned off.
-    int ambientV;
-    // The voltage after smoothing and centering around zero.
+    // The voltage with high frequencies removed and adjusted for ambient lighting.
     float smoothV;
     // The voltage after converting to a binary signal.
     bool pulseHigh;
@@ -139,19 +118,22 @@ public:
   Reading read() {
     Reading result;
 
-    result.ambientV = analogRead(readPin);
+    float rawAmbientV = analogRead(readPin);
+    int deltaTAmbient = sinceReadAmbient;
+    sinceReadAmbient = 0;
+    result.ambientV = smoothAmbient.update(rawAmbientV, deltaTAmbient);
+    
     digitalWrite(lightPin, HIGH);
     delayMicroseconds(100);
+
     result.rawV = analogRead(readPin);
+    int deltaT = sinceReadV;
+    sinceReadV = 0;
+    result.smoothV = smoothV.update(result.rawV - result.ambientV, deltaT);
+
     digitalWrite(lightPin, LOW);
-
-    int deltaT = sinceRead;
-    sinceRead = 0;
-
-    float centeredV = highPass((float)(result.rawV - result.ambientV), deltaT);
-    result.smoothV = lowPass(centeredV, deltaT);
-
-    result.frequency = findFrequency(crossed(smoothV), deltaT);
+    
+    result.frequency = findFrequency(crossed(result.smoothV), deltaT);
     result.pulseHigh = pulseHigh;
     
     return result;
@@ -161,14 +143,14 @@ public:
   void begin() {
     pinMode(lightPin, OUTPUT);
     digitalWrite(lightPin, LOW);
-    delay(1);
-    offset = analogRead(readPin);
-    smoothV = 0;
+    smoothAmbient.reset();
+    smoothV.reset();
     pulseHigh = false;
-    
+
+    // Wait for the start of the first pulse.
     while (true) {
       Reading val = read();
-      if (val.rawV > minPulseHeight) {
+      if (val.rawV > 0.5 * pulseHeight) {
         return;
       }
       delay(1);
