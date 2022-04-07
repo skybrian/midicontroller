@@ -21,4 +21,19 @@ class LowPassFilter {
   }
 };
 
+class HighPassFilter {
+  LowPassFilter inner;
+
+  public:
+  HighPassFilter(const float cutoffHz) : inner(cutoffHz) {}
+
+  void reset() {
+    inner.reset();
+  }
+
+  float update(int v, int deltaT) {
+    return v - inner.update(v, deltaT);
+  }
+};
+
 #endif // FILTERS_H

@@ -29,6 +29,8 @@ class Tachometer {
   LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz);
   LowPassFilter smoothV = LowPassFilter(maxHertz);
 
+  HighPassFilter slopeV = HighPassFilter(maxHertz);
+
   // === Finds when the pulse changed between low and high.
 
   bool pulseHigh;
@@ -107,6 +109,8 @@ public:
     int rawV;
     // The voltage with high frequencies removed and adjusted for ambient lighting.
     float smoothV;
+    // The slope of smoothV, for finding peaks.
+    float slopeV;
     // The voltage after converting to a binary signal.
     bool pulseHigh;
     // The estimated frequency.
@@ -132,6 +136,8 @@ public:
     result.smoothV = smoothV.update(result.rawV - result.ambientV, deltaT);
 
     digitalWrite(lightPin, LOW);
+
+    result.slopeV = slopeV.update(result.smoothV, deltaT);
     
     result.frequency = findFrequency(crossed(result.smoothV), deltaT);
     result.pulseHigh = pulseHigh;
