@@ -52,8 +52,9 @@ void loop() {
     sincePrint = 0;
     // Serial.print(vals.ambientV); Serial.print(", ");
     // Serial.print(vals.rawV); Serial.print(", ");
-    // Serial.print(vals.smoothV); Serial.print(", ");
+    Serial.print(vals.smoothV); Serial.print(", ");
     Serial.print(vals.slopeV); Serial.print(", ");
+    Serial.print(vals.zeroV); Serial.print(", ");
     Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
     Serial.println(vals.frequency);
   }

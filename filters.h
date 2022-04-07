@@ -3,17 +3,21 @@
 
 class LowPassFilter {
   const float cutoff;
+  const float start;
   
-  float smoothV = 0;
+  float smoothV;
 
   public:
-  LowPassFilter(const float cutoffHz) : cutoff(cutoffHz / 1000.0) {}
+  LowPassFilter(const float cutoffHz, float startV = 0.0) :
+    cutoff(cutoffHz / 1000.0),
+    start(startV),
+    smoothV(startV) {}
 
   void reset() {
-    smoothV = 0;
+    smoothV = start;
   }
 
-  float update(int v, int deltaT) {
+  float update(float v, int deltaT) {
     float weight = cutoff * deltaT; // bad approximation?
     if (weight > 1.0) weight = 1.0;
     smoothV = (1.0 - weight) * smoothV + weight * v;
@@ -25,14 +29,40 @@ class HighPassFilter {
   LowPassFilter inner;
 
   public:
-  HighPassFilter(const float cutoffHz) : inner(cutoffHz) {}
+  HighPassFilter(const float cutoffHz, float startV = 0.0) : inner(cutoffHz, startV) {}
 
   void reset() {
     inner.reset();
   }
 
-  float update(int v, int deltaT) {
+  float update(float v, int deltaT) {
     return v - inner.update(v, deltaT);
+  }
+};
+
+class ZeroLevelTracker {
+  const float minSlope;
+  LowPassFilter inner;
+  const float start;
+  float zeroLevel = 0;
+
+  public:
+  ZeroLevelTracker(const float minSlopeToAverage, const float cutoffHz, float startLevel) :
+    minSlope(minSlopeToAverage),
+    inner(cutoffHz, startLevel),
+    start(startLevel),
+    zeroLevel(start) {} 
+
+  void reset() {
+    zeroLevel = start;
+  }
+
+  float update(float v, int deltaV, float slope) {
+    if (slope < 0) slope = -slope;
+    if (slope > minSlope) {
+      zeroLevel = inner.update(v, deltaV);
+    }
+    return zeroLevel;
   }
 };
 

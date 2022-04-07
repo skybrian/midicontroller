@@ -30,16 +30,17 @@ class Tachometer {
   LowPassFilter smoothV = LowPassFilter(maxHertz);
 
   HighPassFilter slopeV = HighPassFilter(maxHertz);
+  ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, 0.5 * pulseHeight);
 
   // === Finds when the pulse changed between low and high.
 
   bool pulseHigh;
 
-  // Takes a voltage (v).
+  // Takes a voltage (v), centered on the midpoint of the signal.
   // Returns true if the voltage has changed between the high and low regions of the pulse.
   bool crossed(int v) {
-    bool crossed = (pulseHigh && v < 0.4 * pulseHeight) || (!pulseHigh && v > 0.6 * pulseHeight);
-    if (crossed) pulseHigh = v > 0.5 * pulseHeight;
+    bool crossed = (pulseHigh && v < -0.1 * pulseHeight) || (!pulseHigh && v > 0.1 * pulseHeight);
+    if (crossed) pulseHigh = v > 0;
     return crossed;
   }
 
@@ -109,8 +110,10 @@ public:
     int rawV;
     // The voltage with high frequencies removed and adjusted for ambient lighting.
     float smoothV;
-    // The slope of smoothV, for finding peaks.
+    // The slope of smoothV.
     float slopeV;
+    // Estimated midpoint of the pulses.
+    float zeroV;
     // The voltage after converting to a binary signal.
     bool pulseHigh;
     // The estimated frequency.
@@ -133,13 +136,14 @@ public:
     result.rawV = analogRead(readPin);
     int deltaT = sinceReadV;
     sinceReadV = 0;
-    result.smoothV = smoothV.update(result.rawV - result.ambientV, deltaT);
 
     digitalWrite(lightPin, LOW);
 
+    result.smoothV = smoothV.update(result.rawV - result.ambientV, deltaT);
     result.slopeV = slopeV.update(result.smoothV, deltaT);
+    result.zeroV = zeroV.update(result.smoothV, deltaT, result.slopeV);
     
-    result.frequency = findFrequency(crossed(result.smoothV), deltaT);
+    result.frequency = findFrequency(crossed(result.smoothV - result.zeroV), deltaT);
     result.pulseHigh = pulseHigh;
     
     return result;
@@ -151,6 +155,7 @@ public:
     digitalWrite(lightPin, LOW);
     smoothAmbient.reset();
     smoothV.reset();
+    zeroV.reset();
     pulseHigh = false;
 
     // Wait for the start of the first pulse.
