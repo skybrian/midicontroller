@@ -22,8 +22,8 @@ class Tachometer {
   const float pulseHeight = 750.0;
 
   // When counting ticks to compute the frequency, how much time to average over.
-  // In milliseconds.
-  const float tickAveragePeriod = 250;
+  // In seconds.
+  const float tickAveragePeriod = .250;
 
   // == Low pass filters to smooth the ambient and lit voltages.
   LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz);
@@ -46,8 +46,8 @@ class Tachometer {
 
   // === Finds the pulse frequency by adjusting an estimate after each crossing.
 
-  const float minPeriod = 1000.0 / maxHertz;
-  const float maxPeriod = 1000.0 / minHertz;
+  const float minPeriod = 1000000.0 / maxHertz;
+  const float maxPeriod = 1000000.0 / minHertz;
 
   // A count of ticks seen within the previous tickAveragePeriod. (Estimate.)
   float ticks = 0;
@@ -64,12 +64,12 @@ class Tachometer {
   // The period over which to add the next tick.
   float nextTickTime = 0;
 
-  // Takes a flag for whether a tick was seen (sawTick) and milliseconds since the previous read (deltaT).
-  // Returns the new estimated frequency.
+  // Takes a flag for whether a tick was seen (sawTick) and microseconds since the previous read (deltaT).
+  // Returns the new estimated frequency in hertz.
   float findFrequency(bool sawTick, int deltaT) {
     sinceTick += deltaT;
 
-    ticks -= (ticks / tickAveragePeriod) * deltaT;
+    ticks -= (ticks / tickAveragePeriod) * deltaT * 0.000001;
 
     if (nextTickTime > 0) {
       float fractionTime = nextTickTime > deltaT ? deltaT : nextTickTime;
@@ -88,7 +88,7 @@ class Tachometer {
       sinceTick = 0; 
     }
 
-    return 1000.0 * ticks / tickAveragePeriod;
+    return ticks / tickAveragePeriod;
   }
 
   // The pin to turn the LED on.
@@ -97,7 +97,7 @@ class Tachometer {
   // The analog pin to read the voltage from the phototransistor.
   const int readPin;
 
-  elapsedMillis sinceReadV, sinceReadAmbient;
+  elapsedMicros sinceReadV, sinceReadAmbient;
 
 public:
 

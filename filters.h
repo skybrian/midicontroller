@@ -9,7 +9,7 @@ class LowPassFilter {
 
   public:
   LowPassFilter(const float cutoffHz, float startV = 0.0) :
-    cutoff(cutoffHz / 1000.0),
+    cutoff(cutoffHz / 1000000.0),
     start(startV),
     smoothV(startV) {}
 
@@ -17,6 +17,7 @@ class LowPassFilter {
     smoothV = start;
   }
 
+  // Given a signal and the elapsed time in microseconds, returns the new value.
   float update(float v, int deltaT) {
     float weight = cutoff * deltaT; // bad approximation?
     if (weight > 1.0) weight = 1.0;
