@@ -13,13 +13,13 @@ class Tachometer {
   const float minHertz = 0.2;
 
   // Amount of smoothing for the low-pass filter, removing high-frequency noise.
-  const float maxHertz = 100;
+  const float maxHertz = 200;
 
   // Amount of smoothing for ambient lighting.
   const float maxAmbientHertz = 2;
 
   // Expected amount of voltage change above ambient lighting.
-  const float pulseHeight = 500.0;
+  const float pulseHeight = 750.0;
 
   // When counting ticks to compute the frequency, how much time to average over.
   // In milliseconds.
@@ -30,7 +30,7 @@ class Tachometer {
   LowPassFilter smoothV = LowPassFilter(maxHertz);
 
   HighPassFilter slopeV = HighPassFilter(maxHertz);
-  ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, 0.5 * pulseHeight);
+  ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, pulseHeight / 2);
 
   // === Finds when the pulse changed between low and high.
 
