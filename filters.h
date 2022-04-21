@@ -1,15 +1,16 @@
 #ifndef FILTERS_H
 #define FILTERS_H
 
+// A simple IIR low pass filter.
 class LowPassFilter {
-  const float cutoff;
+  const float weight;
   const float start;
   
   float smoothV;
 
   public:
-  LowPassFilter(const float cutoffHz, float startV = 0.0) :
-    cutoff(cutoffHz / 1000000.0),
+  LowPassFilter(const float cutoffHz, const int deltaT, float startV = 0.0) :
+    weight(cutoffHz / 1000000.0 * deltaT),
     start(startV),
     smoothV(startV) {}
 
@@ -18,26 +19,26 @@ class LowPassFilter {
   }
 
   // Given a signal and the elapsed time in microseconds, returns the new value.
-  float update(float v, int deltaT) {
-    float weight = cutoff * deltaT; // bad approximation?
-    if (weight > 1.0) weight = 1.0;
+  float update(float v) {
     smoothV = (1.0 - weight) * smoothV + weight * v;
     return smoothV;
   }
 };
 
+// A simple IIR high-pass filter.
 class HighPassFilter {
   LowPassFilter inner;
 
   public:
-  HighPassFilter(const float cutoffHz, float startV = 0.0) : inner(cutoffHz, startV) {}
+  HighPassFilter(const float cutoffHz, const int deltaT, float startV = 0.0)
+    : inner(cutoffHz, deltaT, startV) {}
 
   void reset() {
     inner.reset();
   }
 
-  float update(float v, int deltaT) {
-    return v - inner.update(v, deltaT);
+  float update(float v) {
+    return v - inner.update(v);
   }
 };
 
@@ -48,9 +49,9 @@ class ZeroLevelTracker {
   float zeroLevel = 0;
 
   public:
-  ZeroLevelTracker(const float minSlopeToAverage, const float cutoffHz, float startLevel) :
+  ZeroLevelTracker(const float minSlopeToAverage, const float cutoffHz, const int deltaT, float startLevel) :
     minSlope(minSlopeToAverage),
-    inner(cutoffHz, startLevel),
+    inner(cutoffHz, deltaT, startLevel),
     start(startLevel),
     zeroLevel(start) {} 
 
@@ -58,10 +59,10 @@ class ZeroLevelTracker {
     zeroLevel = start;
   }
 
-  float update(float v, int deltaV, float slope) {
+  float update(float v, float slope) {
     if (slope < 0) slope = -slope;
     if (slope > minSlope) {
-      zeroLevel = inner.update(v, deltaV);
+      zeroLevel = inner.update(v);
     }
     return zeroLevel;
   }

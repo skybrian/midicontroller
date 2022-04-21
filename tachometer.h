@@ -10,6 +10,9 @@ class Tachometer {
 
   // === Parameters.
 
+  // The the time between voltage reads in microseconds.
+  const int deltaT = 200;
+
   const float minHertz = 0.2;
 
   // Amount of smoothing for the low-pass filter, removing high-frequency noise.
@@ -26,11 +29,11 @@ class Tachometer {
   const float tickAveragePeriod = .250;
 
   // == Low pass filters to smooth the ambient and lit voltages.
-  LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz);
-  LowPassFilter smoothV = LowPassFilter(maxHertz);
+  LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz, deltaT);
+  LowPassFilter smoothV = LowPassFilter(maxHertz, deltaT);
 
-  HighPassFilter slopeV = HighPassFilter(maxHertz);
-  ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, pulseHeight / 2);
+  HighPassFilter slopeV = HighPassFilter(maxHertz, deltaT);
+  ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, deltaT, pulseHeight / 2);
 
   // === Finds when the pulse changed between low and high.
 
@@ -49,7 +52,7 @@ class Tachometer {
   const float minPeriod = 1000000.0 / maxHertz;
   const float maxPeriod = 1000000.0 / minHertz;
 
-  // A count of ticks seen within the previous tickAveragePeriod. (Estimate.)
+  // An estimate of ticks seen within the previous tickAveragePeriod.
   float ticks = 0;
 
   // Milliseconds between the previous two ticks.
@@ -66,7 +69,7 @@ class Tachometer {
 
   // Takes a flag for whether a tick was seen (sawTick) and microseconds since the previous read (deltaT).
   // Returns the new estimated frequency in hertz.
-  float findFrequency(bool sawTick, int deltaT) {
+  float findFrequency(bool sawTick) {
     sinceTick += deltaT;
 
     ticks -= (ticks / tickAveragePeriod) * deltaT * 0.000001;
@@ -97,8 +100,6 @@ class Tachometer {
   // The analog pin to read the voltage from the phototransistor.
   const int readPin;
 
-  elapsedMicros sinceReadV, sinceReadAmbient;
-
 public:
 
   Tachometer(const int ledPin, const int sensorPin) : lightPin(ledPin), readPin(sensorPin) {}
@@ -119,34 +120,54 @@ public:
     // The estimated frequency.
     float frequency;
   };
- 
-  // Reads the current pulse frequency.
-  // If not called frequently enough, this will miss pulses and undercount. 
-  Reading read() {
+
+private:
+
+  elapsedMicros sincePoll;
+  bool gotAmbient = false;
+  int rawAmbientV;
+  Reading lastRead;
+
+public:
+
+  // Reads the next value if enough time has elapsed. Returns true if a new reading is available.
+  bool poll() {
+    if (sincePoll < deltaT - 100) {
+      return false;
+    }
+
+    if (!gotAmbient) {
+      rawAmbientV = analogRead(readPin);
+      digitalWrite(lightPin, HIGH);
+      gotAmbient = true;
+      return false;
+    }
+
+    if (sincePoll < deltaT) {
+      return false;
+    }
+
     Reading result;
-
-    float rawAmbientV = analogRead(readPin);
-    int deltaTAmbient = sinceReadAmbient;
-    sinceReadAmbient = 0;
-    result.ambientV = smoothAmbient.update(rawAmbientV, deltaTAmbient);
-    
-    digitalWrite(lightPin, HIGH);
-    delayMicroseconds(100);
-
+    result.ambientV = smoothAmbient.update(rawAmbientV);
     result.rawV = analogRead(readPin);
-    int deltaT = sinceReadV;
-    sinceReadV = 0;
-
+    sincePoll = 0;
     digitalWrite(lightPin, LOW);
 
-    result.smoothV = smoothV.update(result.rawV - result.ambientV, deltaT);
-    result.slopeV = slopeV.update(result.smoothV, deltaT);
-    result.zeroV = zeroV.update(result.smoothV, deltaT, result.slopeV);
+    result.smoothV = smoothV.update(result.rawV - result.ambientV);
+    result.slopeV = slopeV.update(result.smoothV);
+    result.zeroV = zeroV.update(result.smoothV, result.slopeV);
     
-    result.frequency = findFrequency(crossed(result.smoothV - result.zeroV), deltaT);
+    result.frequency = findFrequency(crossed(result.smoothV - result.zeroV));
     result.pulseHigh = pulseHigh;
-    
-    return result;
+
+    lastRead = result;
+    gotAmbient = false;
+    return true;
+  }
+
+  // Returns the most recently read value.
+  Reading read() {
+    return lastRead;
   }
 
   // Clears the filters and waits until we get a pulse.
@@ -158,16 +179,13 @@ public:
     zeroV.reset();
     pulseHigh = false;
 
-    // Wait for the start of the first pulse.
-    while (true) {
-      Reading val = read();
-      if (val.rawV > 0.5 * pulseHeight) {
-        return;
+    // Do a few reads to get started.
+    for (int i = 0; i < 10; i++) {
+      while (!poll()) {
+        // busy wait. It doesn't look like the Pico has sleep.
       }
-      delay(1);
     }
   }
-  
 }; // end tachometer
 
 #endif // TACHOMETER_H

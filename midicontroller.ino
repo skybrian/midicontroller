@@ -43,6 +43,10 @@ void setup() {
 elapsedMillis sincePrint;
 
 void loop() {
+  if (!wheel.poll()) {
+    return; // Busy wait until next read.
+  }
+
   MID.read();
 
   Tachometer::Reading vals = wheel.read();
@@ -50,13 +54,12 @@ void loop() {
   
   if (sincePrint >= 25) {
     sincePrint = 0;
-    // Serial.print(vals.ambientV); Serial.print(", ");
-    // Serial.print(vals.rawV); Serial.print(", ");
-    // Serial.print(vals.smoothV); Serial.print(", ");
-    // Serial.print(vals.slopeV); Serial.print(", ");
-    // Serial.print(vals.zeroV); Serial.print(", ");
+//    Serial.print(vals.ambientV); Serial.print(", ");
+//    Serial.print(vals.rawV); Serial.print(", ");
+//    Serial.print(vals.smoothV); Serial.print(", ");
+//    Serial.print(vals.slopeV); Serial.print(", ");
+//    Serial.print(vals.zeroV); Serial.print(", ");
     Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
     Serial.println(vals.frequency);
   }
-  delayMicroseconds(500);
 }
