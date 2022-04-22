@@ -10,7 +10,7 @@ class LowPassFilter {
 
   public:
   LowPassFilter(const float cutoffHz, const int deltaT, float startV = 0.0) :
-    weight(cutoffHz / 1000000.0 * deltaT),
+    weight(cutoffHz / 1000000.0 * deltaT), // TODO: use correct equation here.
     start(startV),
     smoothV(startV) {}
 
@@ -39,6 +39,61 @@ class HighPassFilter {
 
   float update(float v) {
     return v - inner.update(v);
+  }
+};
+
+template<size_t SIZE>
+class MovingAverageFilter {
+  float queue[SIZE];
+  int next;
+  float sum;
+
+  public:
+  MovingAverageFilter() {
+    reset();
+  }
+
+  void reset() {
+    for (int i = 0; i < SIZE; i++) {
+      queue[i] = 0;
+    }
+    next = 0;
+    sum = 0;
+  }
+
+  float update(float v) {
+    sum += v;
+    sum -= queue[next];
+    queue[next] = v;
+    next++;
+    if (next >= SIZE) next = 0;
+    return sum / SIZE;
+  }
+};
+
+template<int period, int deltaT>
+class MultipassFilter {
+  static constexpr float decayHz = 10;
+
+  MovingAverageFilter<period/(3 * deltaT)> a;
+  MovingAverageFilter<period/(3 * deltaT)> b;
+  MovingAverageFilter<period/(3 * deltaT)> c;
+  LowPassFilter last;
+
+public:
+  MultipassFilter() : last(decayHz, deltaT) {
+    reset();
+  }
+
+  void reset() {
+    a.reset();
+    b.reset();
+    c.reset();
+    last.reset();
+  }
+
+  float update(float v) {
+    return last.update(c.update(b.update(a.update(v))));
   }
 };
 

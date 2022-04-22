@@ -11,22 +11,24 @@ class Tachometer {
   // === Parameters.
 
   // The the time between voltage reads in microseconds.
-  const int deltaT = 200;
+  static constexpr int deltaT = 200;
 
-  const float minHertz = 0.2;
+  static constexpr float minHertz = 0.2;
 
   // Amount of smoothing for the low-pass filter, removing high-frequency noise.
-  const float maxHertz = 200;
+  static constexpr float maxHertz = 200;
 
   // Amount of smoothing for ambient lighting.
-  const float maxAmbientHertz = 2;
+  static constexpr float maxAmbientHertz = 2;
 
   // Expected amount of voltage change above ambient lighting.
-  const float pulseHeight = 750.0;
+  static constexpr float pulseHeight = 750.0;
 
-  // When counting ticks to compute the frequency, how much time to average over.
-  // In seconds.
-  const float tickAveragePeriod = .250;
+  // When counting cycles to compute the frequency, how much time to average over.
+  // In microseconds.
+  static constexpr int cycleAveragePeriod = 250000;
+
+  static constexpr int cyclePasses = 3;
 
   // == Low pass filters to smooth the ambient and lit voltages.
   LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz, deltaT);
@@ -34,6 +36,9 @@ class Tachometer {
 
   HighPassFilter slopeV = HighPassFilter(maxHertz, deltaT);
   ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, deltaT, pulseHeight / 2);
+
+  // An estimate of cycles seen within the previous cycleAveragePeriod.
+  MultipassFilter<cycleAveragePeriod, deltaT> cycles;
 
   // === Finds when the pulse changed between low and high.
 
@@ -45,53 +50,6 @@ class Tachometer {
     bool crossed = (pulseHigh && v < -0.1 * pulseHeight) || (!pulseHigh && v > 0.1 * pulseHeight);
     if (crossed) pulseHigh = v > 0;
     return crossed;
-  }
-
-  // === Finds the pulse frequency by adjusting an estimate after each crossing.
-
-  const float minPeriod = 1000000.0 / maxHertz;
-  const float maxPeriod = 1000000.0 / minHertz;
-
-  // An estimate of ticks seen within the previous tickAveragePeriod.
-  float ticks = 0;
-
-  // Milliseconds between the previous two ticks.
-  float prevPeriod = maxPeriod;
-
-  // Milliseconds since the previous tick.
-  int sinceTick = 0;
-
-  // Amount of the next tick to be added.
-  float nextTickFraction = 0;
-
-  // The period over which to add the next tick.
-  float nextTickTime = 0;
-
-  // Takes a flag for whether a tick was seen (sawTick) and microseconds since the previous read (deltaT).
-  // Returns the new estimated frequency in hertz.
-  float findFrequency(bool sawTick) {
-    sinceTick += deltaT;
-
-    ticks -= (ticks / tickAveragePeriod) * deltaT * 0.000001;
-
-    if (nextTickTime > 0) {
-      float fractionTime = nextTickTime > deltaT ? deltaT : nextTickTime;
-      float fraction = nextTickFraction * (fractionTime / nextTickTime);
-      ticks += fraction;
-      nextTickFraction -= fraction;
-      nextTickTime -= fractionTime;
-    }
-
-    if (sawTick) {
-      nextTickFraction += 1;
-      float oldPeriod = prevPeriod;
-      prevPeriod = sinceTick;
-      // Estimate based on constant speed and two ticks per cycle, possibly of uneven length.
-      nextTickTime = oldPeriod;
-      sinceTick = 0; 
-    }
-
-    return ticks / tickAveragePeriod;
   }
 
   // The pin to turn the LED on.
@@ -156,8 +114,9 @@ public:
     result.smoothV = smoothV.update(result.rawV - result.ambientV);
     result.slopeV = slopeV.update(result.smoothV);
     result.zeroV = zeroV.update(result.smoothV, result.slopeV);
-    
-    result.frequency = findFrequency(crossed(result.smoothV - result.zeroV));
+
+    float progress = crossed(result.smoothV - result.zeroV) ? 0.5 : 0;
+    result.frequency = cycles.update(progress) * 1000000 / deltaT;
     result.pulseHigh = pulseHigh;
 
     lastRead = result;
@@ -177,6 +136,7 @@ public:
     smoothAmbient.reset();
     smoothV.reset();
     zeroV.reset();
+    cycles.reset();
     pulseHigh = false;
 
     // Do a few reads to get started.
