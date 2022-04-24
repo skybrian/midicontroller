@@ -24,23 +24,34 @@ void sendControlChange(int value) {
   prevControlValue = val;
 }
 
+bool logEnabled = false;
+
 void setup() {
   MID.begin();
   
   Serial.begin(115200);
-  while (!Serial) delay(1);
-  
-  
-  Serial.print("\nCalibrating...");
-  Serial.flush();
+  if (Serial.dtr()) {
+    Serial.print("\nCalibrating...");
+    Serial.flush();
+  }
   wheel.begin();
 
   while( !USBDevice.mounted() ) delay(1);
-  sendControlChange(0); 
-  Serial.println("Ready.");
+  sendControlChange(0);
+  if (Serial.dtr()) {
+    Serial.println("Ready.");
+    printHeader();
+  } else {
+    logEnabled = false;
+  }
 }
 
 elapsedMillis sincePrint;
+elapsedMillis flushTime;
+
+void printHeader() {
+    Serial.println("PulseHigh,Frequency");
+}
 
 void loop() {
   if (!wheel.poll()) {
@@ -50,16 +61,27 @@ void loop() {
   MID.read();
 
   Tachometer::Reading vals = wheel.read();
-  sendControlChange((int)vals.frequency);
-  
-  if (sincePrint >= 25) {
-    sincePrint = 0;
+  sendControlChange((int)vals.frequency * 2);
+
+  if (sincePrint < 25) return;
+  sincePrint = 0;
+
+  if (!Serial.dtr()) {
+    logEnabled = false;
+    return;
+  }
+
+  if (!logEnabled) {
+    printHeader();
+    logEnabled = true;
+  }
+
 //    Serial.print(vals.ambientV); Serial.print(", ");
 //    Serial.print(vals.rawV); Serial.print(", ");
 //    Serial.print(vals.smoothV); Serial.print(", ");
 //    Serial.print(vals.slopeV); Serial.print(", ");
 //    Serial.print(vals.zeroV); Serial.print(", ");
-    Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
-    Serial.println(vals.frequency);
-  }
+  Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
+  Serial.println(vals.frequency);
+  Serial.flush();
 }
