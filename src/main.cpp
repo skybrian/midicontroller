@@ -1,3 +1,5 @@
+#include <Arduino.h>
+
 #include <Adafruit_TinyUSB.h>
 #include <elapsedMillis.h>
 
@@ -26,9 +28,13 @@ void sendControlChange(int value) {
 
 bool logEnabled = false;
 
+void printHeader() {
+    Serial.println("PulseHigh,Frequency");
+}
+
 void setup() {
   MID.begin();
-  
+
   Serial.begin(115200);
   if (Serial.dtr()) {
     Serial.print("\nCalibrating...");
@@ -48,10 +54,6 @@ void setup() {
 
 elapsedMillis sincePrint;
 elapsedMillis flushTime;
-
-void printHeader() {
-    Serial.println("PulseHigh,Frequency");
-}
 
 void loop() {
   if (!wheel.poll()) {
@@ -76,8 +78,8 @@ void loop() {
     logEnabled = true;
   }
 
-//    Serial.print(vals.ambientV); Serial.print(", ");
-//    Serial.print(vals.rawV); Serial.print(", ");
+    Serial.print(vals.ambientV); Serial.print(", ");
+    Serial.print(vals.rawV); Serial.print(", ");
 //    Serial.print(vals.smoothV); Serial.print(", ");
 //    Serial.print(vals.slopeV); Serial.print(", ");
 //    Serial.print(vals.zeroV); Serial.print(", ");
