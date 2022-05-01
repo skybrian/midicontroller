@@ -1,16 +1,26 @@
 #ifndef FILTERS_H
 #define FILTERS_H
 
+#include <math.h>
+
 // A simple IIR low pass filter.
 class LowPassFilter {
   const float weight;
   const float start;
-  
+
   float smoothV;
+
+  static float cutoffToWeight(const float cutoffHz, const int deltaT) {
+    // based on: https://dsp.stackexchange.com/questions/34969/cutoff-frequency-of-a-first-order-recursive-filter
+    float f = cutoffHz / deltaT;
+    float omega = 2 * PI * f;
+    float b = 2 - cos(omega) - sqrt(pow(2 - cos(omega), 2) - 1);
+    return 1 - b;
+  }
 
   public:
   LowPassFilter(const float cutoffHz, const int deltaT, float startV = 0.0) :
-    weight(cutoffHz / 1000000.0 * deltaT), // TODO: use correct equation here.
+    weight(cutoffToWeight(cutoffHz, deltaT)), // TODO: use correct equation here.
     start(startV),
     smoothV(startV) {}
 
@@ -108,7 +118,7 @@ class ZeroLevelTracker {
     minSlope(minSlopeToAverage),
     inner(cutoffHz, deltaT, startLevel),
     start(startLevel),
-    zeroLevel(start) {} 
+    zeroLevel(start) {}
 
   void reset() {
     zeroLevel = start;

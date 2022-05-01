@@ -29,7 +29,7 @@ void sendControlChange(int value) {
 bool logEnabled = false;
 
 void printHeader() {
-    Serial.println("PulseHigh,Frequency");
+    Serial.println("SmoothV,ZeroV,PulseHigh,Frequency");
 }
 
 void setup() {
@@ -63,7 +63,7 @@ void loop() {
   MID.read();
 
   Tachometer::Reading vals = wheel.read();
-  sendControlChange((int)vals.frequency * 2);
+  sendControlChange((int)vals.frequency * 0.5);
 
   if (sincePrint < 25) return;
   sincePrint = 0;
@@ -78,12 +78,12 @@ void loop() {
     logEnabled = true;
   }
 
-    Serial.print(vals.ambientV); Serial.print(", ");
-    Serial.print(vals.rawV); Serial.print(", ");
-//    Serial.print(vals.smoothV); Serial.print(", ");
+//    Serial.print(vals.ambientV); Serial.print(", ");
+//    Serial.print(vals.rawV); Serial.print(", ");
+    Serial.print(vals.smoothV); Serial.print(", ");
 //    Serial.print(vals.slopeV); Serial.print(", ");
-//    Serial.print(vals.zeroV); Serial.print(", ");
-  Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
+    Serial.print(vals.zeroV); Serial.print(", ");
+    Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
   Serial.println(vals.frequency);
   Serial.flush();
 }

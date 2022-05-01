@@ -11,7 +11,7 @@ class Tachometer {
   // === Parameters.
 
   // The the time between voltage reads in microseconds.
-  static constexpr int deltaT = 200;
+  static constexpr int deltaT = 300;
 
   static constexpr float minHertz = 0.2;
 
@@ -22,11 +22,11 @@ class Tachometer {
   static constexpr float maxAmbientHertz = 2;
 
   // Expected amount of voltage change above ambient lighting.
-  static constexpr float pulseHeight = 750.0;
+  static constexpr float pulseHeight = 500.0;
 
   // When counting cycles to compute the frequency, how much time to average over.
   // In microseconds.
-  static constexpr int cycleAveragePeriod = 250000;
+  static constexpr int cycleAveragePeriod = 200000;
 
   static constexpr int cyclePasses = 3;
 
@@ -90,7 +90,7 @@ public:
 
   // Reads the next value if enough time has elapsed. Returns true if a new reading is available.
   bool poll() {
-    if (sincePoll < deltaT - 100) {
+    if (sincePoll < deltaT - 200) {
       return false;
     }
 
@@ -104,11 +104,18 @@ public:
     if (sincePoll < deltaT) {
       return false;
     }
+    sincePoll = 0;
+
+    int rawV = 0;
+    for (int i = 0; i < 3; i++) {
+      rawV += analogRead(readPin);
+      delayMicroseconds(50);
+    }
+    rawV = rawV / 3;
 
     Reading result;
     result.ambientV = smoothAmbient.update(rawAmbientV);
-    result.rawV = analogRead(readPin);
-    sincePoll = 0;
+    result.rawV = rawV;
     digitalWrite(lightPin, LOW);
 
     result.smoothV = smoothV.update(result.rawV - result.ambientV);
