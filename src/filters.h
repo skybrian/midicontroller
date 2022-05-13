@@ -6,7 +6,6 @@
 // A simple IIR low pass filter.
 class LowPassFilter {
   const float weight;
-  const float start;
 
   float smoothV;
 
@@ -20,12 +19,11 @@ class LowPassFilter {
 
   public:
   LowPassFilter(const float cutoffHz, const int deltaT, float startV = 0.0) :
-    weight(cutoffToWeight(cutoffHz, deltaT)), // TODO: use correct equation here.
-    start(startV),
+    weight(cutoffToWeight(cutoffHz, deltaT)),
     smoothV(startV) {}
 
-  void reset() {
-    smoothV = start;
+  void reset(float startV) {
+    smoothV = startV;
   }
 
   // Given a signal and the elapsed time in microseconds, returns the new value.
@@ -43,8 +41,8 @@ class HighPassFilter {
   HighPassFilter(const float cutoffHz, const int deltaT, float startV = 0.0)
     : inner(cutoffHz, deltaT, startV) {}
 
-  void reset() {
-    inner.reset();
+  void reset(float startV) {
+    inner.reset(startV);
   }
 
   float update(float v) {
@@ -99,7 +97,7 @@ public:
     a.reset();
     b.reset();
     c.reset();
-    last.reset();
+    last.reset(0);
   }
 
   float update(float v) {

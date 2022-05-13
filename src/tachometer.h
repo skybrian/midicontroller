@@ -11,7 +11,7 @@ class Tachometer {
   // === Parameters.
 
   // The the time between voltage reads in microseconds.
-  static constexpr int deltaT = 300;
+  static constexpr int deltaT = 1000;
 
   static constexpr float minHertz = 0.2;
 
@@ -19,10 +19,10 @@ class Tachometer {
   static constexpr float maxHertz = 200;
 
   // Amount of smoothing for ambient lighting.
-  static constexpr float maxAmbientHertz = 2;
+  static constexpr float maxAmbientHertz = 200;
 
   // Expected amount of voltage change above ambient lighting.
-  static constexpr float pulseHeight = 500.0;
+  static constexpr float pulseHeight = 1000.0;
 
   // When counting cycles to compute the frequency, how much time to average over.
   // In microseconds.
@@ -31,8 +31,10 @@ class Tachometer {
   static constexpr int cyclePasses = 3;
 
   // == Low pass filters to smooth the ambient and lit voltages.
-  LowPassFilter smoothAmbient = LowPassFilter(maxAmbientHertz, deltaT);
-  LowPassFilter smoothV = LowPassFilter(maxHertz, deltaT);
+  LowPassFilter smoothAmbient1 = LowPassFilter(maxAmbientHertz, deltaT);
+  LowPassFilter smoothAmbient2 = LowPassFilter(maxAmbientHertz, deltaT);
+  LowPassFilter smoothV1 = LowPassFilter(maxHertz, deltaT);
+  LowPassFilter smoothV2 = LowPassFilter(maxHertz, deltaT);
 
   HighPassFilter slopeV = HighPassFilter(maxHertz, deltaT);
   ZeroLevelTracker zeroV = ZeroLevelTracker(25.0, minHertz, deltaT, pulseHeight / 2);
@@ -55,20 +57,26 @@ class Tachometer {
   // The pin to turn the LED on.
   const int lightPin;
 
-  // The analog pin to read the voltage from the phototransistor.
-  const int readPin;
+  // The analog pins to read the voltage from the phototransistors.
+  const int readPin1;
+  const int readPin2;
 
 public:
 
-  Tachometer(const int ledPin, const int sensorPin) : lightPin(ledPin), readPin(sensorPin) {}
+  Tachometer(const int ledPin, const int sensorPin1, const int sensorPin2)
+    : lightPin(ledPin), readPin1(sensorPin1), readPin2(sensorPin2) {}
 
   struct Reading {
     // The voltaage witht the LED turned off (smoothed).
-    int ambientV;
-    // The raw voltage signal, as returned by analogRead().
-    int rawV;
+    int ambientV1;
+    int ambientV2;
+    // The raw voltage signals, as returned by analogRead().
+    // They should be 90 degrees out of phase.
+    int rawV1;
+    int rawV2;
     // The voltage with high frequencies removed and adjusted for ambient lighting.
-    float smoothV;
+    float smoothV1;
+    float smoothV2;
     // The slope of smoothV.
     float slopeV;
     // Estimated midpoint of the pulses.
@@ -83,19 +91,20 @@ private:
 
   elapsedMicros sincePoll;
   bool gotAmbient = false;
-  int rawAmbientV;
+  int rawAmbientV1, rawAmbientV2;
   Reading lastRead;
 
 public:
 
   // Reads the next value if enough time has elapsed. Returns true if a new reading is available.
   bool poll() {
-    if (sincePoll < deltaT - 200) {
+    if (sincePoll < deltaT - 500) {
       return false;
     }
 
     if (!gotAmbient) {
-      rawAmbientV = analogRead(readPin);
+      rawAmbientV1 = analogRead(readPin1);
+      rawAmbientV2 = analogRead(readPin2);
       digitalWrite(lightPin, HIGH);
       gotAmbient = true;
       return false;
@@ -106,23 +115,29 @@ public:
     }
     sincePoll = 0;
 
-    int rawV = 0;
-    for (int i = 0; i < 3; i++) {
-      rawV += analogRead(readPin);
-      delayMicroseconds(50);
+    int rawV1 = 0;
+    int rawV2 = 0;
+    for (int i = 0; i < 5; i++) {
+      rawV1 += analogRead(readPin1);
+      rawV2 += analogRead(readPin2);
+      delayMicroseconds(20);
     }
-    rawV = rawV / 3;
+    rawV1 = rawV1 / 5;
+    rawV2 = rawV2 / 5;
 
     Reading result;
-    result.ambientV = smoothAmbient.update(rawAmbientV);
-    result.rawV = rawV;
+    result.ambientV1 = smoothAmbient1.update(rawAmbientV1);
+    result.ambientV2 = smoothAmbient1.update(rawAmbientV2);
+    result.rawV1 = rawV1;
+    result.rawV2 = rawV2;
     digitalWrite(lightPin, LOW);
 
-    result.smoothV = smoothV.update(result.rawV - result.ambientV);
-    result.slopeV = slopeV.update(result.smoothV);
-    result.zeroV = zeroV.update(result.smoothV, result.slopeV);
+    result.smoothV1 = smoothV1.update(result.rawV1 - result.ambientV1);
+    result.smoothV2 = smoothV2.update(result.rawV2 - result.ambientV2);
+    result.slopeV = slopeV.update(result.smoothV1);
+    result.zeroV = zeroV.update(result.smoothV1, result.slopeV);
 
-    float progress = crossed(result.smoothV - result.zeroV) ? 0.5 : 0;
+    float progress = crossed(result.smoothV1 - result.zeroV) ? 0.5 : 0;
     result.frequency = cycles.update(progress) * 1000000 / deltaT;
     result.pulseHigh = pulseHigh;
 
@@ -138,10 +153,17 @@ public:
 
   // Clears the filters and waits until we get a pulse.
   void begin() {
+    // pinMode(readPin1,INPUT);
+    // pinMode(readPin2,INPUT);
     pinMode(lightPin, OUTPUT);
     digitalWrite(lightPin, LOW);
-    smoothAmbient.reset();
-    smoothV.reset();
+    delay(1);
+    float v1 = analogRead(readPin1);
+    float v2 = analogRead(readPin2);
+    smoothAmbient1.reset(v1);
+    smoothAmbient2.reset(v2);
+    smoothV1.reset(v1);
+    smoothV2.reset(v2);
     zeroV.reset();
     cycles.reset();
     pulseHigh = false;

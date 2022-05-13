@@ -12,7 +12,7 @@ MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, midiDev, MID);
 
 midi::DataByte prevControlValue = -1;
 
-Tachometer wheel(22, A0);
+Tachometer wheel(22, A0, A1);
 
 void sendControlChange(int value) {
   if (value < 0) value = 0;
@@ -29,7 +29,7 @@ void sendControlChange(int value) {
 bool logEnabled = false;
 
 void printHeader() {
-    Serial.println("SmoothV,ZeroV,PulseHigh,Frequency");
+    Serial.println("AmbientV1,AmbientV2,RawV1,RawV2,SmoothV1,SmoothV2,SlopeV,ZeroV,PulseHigh,Frequency");
 }
 
 void setup() {
@@ -78,12 +78,16 @@ void loop() {
     logEnabled = true;
   }
 
-//    Serial.print(vals.ambientV); Serial.print(", ");
-//    Serial.print(vals.rawV); Serial.print(", ");
-    Serial.print(vals.smoothV); Serial.print(", ");
-//    Serial.print(vals.slopeV); Serial.print(", ");
-    Serial.print(vals.zeroV); Serial.print(", ");
-    Serial.print(vals.pulseHigh * -10.0); Serial.print(", ");
-  Serial.println(vals.frequency);
+  Serial.print(vals.ambientV1); Serial.print(", ");
+  Serial.print(vals.ambientV2); Serial.print(", ");
+  Serial.print(vals.rawV1); Serial.print(", ");
+  Serial.print(vals.rawV2); Serial.print(", ");
+  Serial.print(vals.smoothV1); Serial.print(", ");
+  Serial.print(vals.smoothV2); Serial.print(", ");
+  Serial.print(vals.slopeV); Serial.print(", ");
+  Serial.print(vals.zeroV); Serial.print(", ");
+  Serial.print(vals.pulseHigh); Serial.print(", ");
+  Serial.print(vals.frequency);
+  Serial.println();
   Serial.flush();
 }
