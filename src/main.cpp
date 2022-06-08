@@ -1,93 +1,47 @@
 #include <Arduino.h>
-
 #include <Adafruit_TinyUSB.h>
 #include <elapsedMillis.h>
+#include <math.h>
 
-#include <MIDI.h>
+#include "sensor.h"
 
-#include "tachometer.h"
-
-Adafruit_USBD_MIDI midiDev;
-MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, midiDev, MID);
-
-midi::DataByte prevControlValue = -1;
-
-Tachometer wheel(22, A0, A1);
-
-void sendControlChange(int value) {
-  if (value < 0) value = 0;
-  if (value > 127) value = 127;
-  midi::DataByte val = value;
-  if (val == prevControlValue) {
-    return;
-  }
-  //Serial.println(val);
-  MID.sendControlChange(1, val, 1);
-  prevControlValue = val;
-}
-
-bool logEnabled = false;
+struct Calculations {
+  float atan2;
+};
 
 void printHeader() {
-    Serial.println("AmbientV1,AmbientV2,RawV1,RawV2,SmoothV1,SmoothV2,SlopeV,ZeroV,PulseHigh,Frequency");
+  Serial.println("ATan2,A,B,Jitter,A Read Time,B Read Time,Total Read Time");
 }
 
-void setup() {
-  MID.begin();
+void printLine(Calculations c, sensor::Reading r) {
+  Serial.print(c.atan2); Serial.print(", ");
 
-  Serial.begin(115200);
-  if (Serial.dtr()) {
-    Serial.print("\nCalibrating...");
-    Serial.flush();
-  }
-  wheel.begin();
-
-  while( !USBDevice.mounted() ) delay(1);
-  sendControlChange(0);
-  if (Serial.dtr()) {
-    Serial.println("Ready.");
-    printHeader();
-  } else {
-    logEnabled = false;
-  }
+  Serial.print(r.a); Serial.print(", ");
+  Serial.print(r.b); Serial.print(", ");
+  Serial.print(r.jitter); Serial.print(", ");
+  Serial.print(r.aReadTime); Serial.print(", ");
+  Serial.print(r.bReadTime); Serial.print(", ");
+  Serial.println(r.totalReadTime);
+  Serial.flush();
 }
 
-elapsedMillis sincePrint;
-elapsedMillis flushTime;
+void setup() {}
 
 void loop() {
-  if (!wheel.poll()) {
-    return; // Busy wait until next read.
+  while (!Serial.dtr()) {
+    sensor::next();
   }
 
-  MID.read();
-
-  Tachometer::Reading vals = wheel.read();
-  sendControlChange((int)vals.frequency * 0.5);
-
-  if (sincePrint < 25) return;
-  sincePrint = 0;
-
-  if (!Serial.dtr()) {
-    logEnabled = false;
-    return;
+  printHeader();
+  while (Serial.dtr()) {
+    sensor::Reading reading = sensor::next();
+    Calculations c;
+    c.atan2 = atan2(reading.b - 300, reading.a - 300);
+    printLine(c, reading);
   }
+}
 
-  if (!logEnabled) {
-    printHeader();
-    logEnabled = true;
-  }
-
-  Serial.print(vals.ambientV1); Serial.print(", ");
-  Serial.print(vals.ambientV2); Serial.print(", ");
-  Serial.print(vals.rawV1); Serial.print(", ");
-  Serial.print(vals.rawV2); Serial.print(", ");
-  Serial.print(vals.smoothV1); Serial.print(", ");
-  Serial.print(vals.smoothV2); Serial.print(", ");
-  Serial.print(vals.slopeV); Serial.print(", ");
-  Serial.print(vals.zeroV); Serial.print(", ");
-  Serial.print(vals.pulseHigh); Serial.print(", ");
-  Serial.print(vals.frequency);
-  Serial.println();
-  Serial.flush();
+void loop1() {
+  delay(100);
+  sensor::runReadLoop();
 }
