@@ -6,7 +6,7 @@ const int aSensorPin = A0;
 const int bSensorPin = A1;
 
 // times in microseconds
-const int samplePeriod = 10000;
+const int samplePeriod = 5000;
 
 // Messages for multi-core fifo.
 // See: https://arduino-pico.readthedocs.io/en/latest/multicore.html#communicating-between-cores
