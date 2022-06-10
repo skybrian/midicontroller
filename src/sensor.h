@@ -15,6 +15,8 @@ struct Reading {
   int totalReadTime;
 };
 
+void begin();
+
 Reading next();
 
 void runReadLoop();

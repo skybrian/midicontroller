@@ -54,7 +54,9 @@ void printLine(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) 
   Serial.flush();
 }
 
-void setup() {}
+void setup() {
+  sensor::begin();
+}
 
 void loop() {
   while (!Serial.dtr()) {

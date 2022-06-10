@@ -10,19 +10,22 @@ const int samplePeriod = 5000;
 
 // Messages for multi-core fifo.
 // See: https://arduino-pico.readthedocs.io/en/latest/multicore.html#communicating-between-cores
-enum { RECEIVED, SENT };
+enum { READY, SENT };
 
 static Reading queuedSample;
 
+void begin() {
+  rp2040.fifo.push(READY);
+}
+
 Reading next() {
   while (rp2040.fifo.pop() != SENT) {}
-
   Reading result = queuedSample;
-  rp2040.fifo.push(RECEIVED);
+  rp2040.fifo.push(READY);
   return result;
 }
 
-static Reading readSample() {
+static Reading __not_in_flash_func(readSample)() {
   Reading out;
 
   elapsedMicros now = 0;
@@ -37,7 +40,7 @@ static Reading readSample() {
 
 elapsedMicros now;
 
-static void readIntoQueue(long nextReadTime) {
+static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
   rp2040.idleOtherCore();
   readSample(); // warmup
 
@@ -49,17 +52,17 @@ static void readIntoQueue(long nextReadTime) {
   }
   while (jitter < 0);
 
-  queuedSample = readSample();
-  queuedSample.jitter = jitter;
-  queuedSample.totalReadTime = ((long)now) - readStart;
-
-  rp2040.fifo.push(SENT);
+  Reading r = readSample();
+  r.jitter = jitter;
+  r.totalReadTime = ((long)now) - readStart;
   rp2040.resumeOtherCore();
 
-  while (rp2040.fifo.pop() != RECEIVED) {}
+  while (rp2040.fifo.pop() != READY) {}
+  queuedSample = r;
+  rp2040.fifo.push(SENT);
 }
 
-void runReadLoop() {
+void __not_in_flash_func(runReadLoop)() {
 
   // warmup
   rp2040.idleOtherCore();
