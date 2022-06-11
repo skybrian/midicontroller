@@ -7,18 +7,21 @@
 #include "calibration.h"
 
 struct LapMetrics {
-  double theta; // in degrees of phase; 360 degrees = 1 grating
-  double delta; // in degrees
-  double laps;
+  float theta; // in degrees of phase; 360 degrees = 1 grating
+  float delta; // in degrees
+  float laps;
+  float adjustedLaps;
+  float adjustedDelta;
 };
 
 int laps = -1;
-double prevTheta = nan("");
+float prevTheta = nanf("");
+float prevAdjustedLaps = nanf("");
 
-LapMetrics calculateLaps(sensor::Reading reading) {
+LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
     lm.theta = atan2(reading.b - 300, reading.a - 300) * 360.0 / (2 * PI);
-    double delta = lm.theta - prevTheta;
+    float delta = lm.theta - prevTheta;
     prevTheta = lm.theta;
     if (delta < -180.0) {
       laps++;
@@ -29,15 +32,21 @@ LapMetrics calculateLaps(sensor::Reading reading) {
     }
     lm.delta = delta;
     lm.laps = laps + lm.theta / 360.0;
+
+    lm.adjustedLaps = calibration::adjustLaps(lm.laps);
+    lm.adjustedDelta = (lm.adjustedLaps - prevAdjustedLaps) * 360.0;
+    prevAdjustedLaps = lm.adjustedLaps;
     return lm;
 }
 
 void printHeader() {
-  Serial.println("Laps,Delta,Theta,WeightUpdates,Bin,Weight,A,B,Jitter,A Read Time,B Read Time,Total Read Time");
+  Serial.println("AdjustedLaps,Laps,AdjustedDelta,Delta,Theta,WeightUpdates,Bin,Weight,A,B,Jitter,A Read Time,B Read Time,Total Read Time");
 }
 
 void printLine(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) {
+  Serial.print(lm.adjustedLaps, 4); Serial.print(", ");
   Serial.print(lm.laps, 4); Serial.print(", ");
+  Serial.print(lm.adjustedDelta); Serial.print(", ");
   Serial.print(lm.delta); Serial.print(", ");
   Serial.print(lm.theta); Serial.print(", ");
 
@@ -67,7 +76,7 @@ void loop() {
   while (Serial.dtr()) {
     sensor::Reading reading = sensor::next();
     LapMetrics lm = calculateLaps(reading);
-    calibration::WeightMetrics wm = calibration::calculateWeights(lm.laps);
+    calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
     printLine(lm, wm, reading);
   }
 }

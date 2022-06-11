@@ -18,7 +18,7 @@ void begin() {
   rp2040.fifo.push(READY);
 }
 
-Reading next() {
+Reading __not_in_flash_func(next)() {
   while (rp2040.fifo.pop() != SENT) {}
   Reading result = queuedSample;
   rp2040.fifo.push(READY);

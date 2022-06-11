@@ -8,8 +8,8 @@ namespace calibration {
 const int binCount = 36;
 
 class Weights {
-  float bin[binCount];
 public:
+  float bin[binCount];
   float total;
 
   Weights(float val) {
@@ -27,12 +27,12 @@ public:
     total = val * binCount;
   }
 
-  void add(int i, float val) {
+  void __not_in_flash_func(add)(int i, float val) {
       bin[((i % binCount) + binCount) % binCount] += val;
       total += val;
   }
 
-  void update(Weights& next, float nextWeight) {
+  void __not_in_flash_func(update)(Weights& next, float nextWeight) {
     float oldWeight = 1 - nextWeight;
     nextWeight = nextWeight / next.total;
     for (int i = 0; i < binCount; i++) {
@@ -40,7 +40,7 @@ public:
     }
   }
 
-  void addRange(float start, float end, float val) {
+  void __not_in_flash_func(addRange)(float start, float end, float val) {
     if (end < start) {
       float tmp = start;
       start = end;
@@ -63,10 +63,40 @@ public:
   }
 };
 
-const int minSamples = 10;
+class LookupTable {
+  float bin[binCount + 1];
+public:
+  LookupTable() {
+    float scale = 1.0/binCount;
+    for (int i = 0; i <= binCount; i++) {
+      bin[i] = scale * i;
+    }
+  }
+
+  void __not_in_flash_func(setWeights)(float weights[binCount]) {
+    float sum = 0;
+    for (int i = 0; i <= binCount; i++) {
+      bin[i] = sum;
+      sum += weights[i];
+    }
+  }
+
+  float __not_in_flash_func(adjust)(float laps) {
+    float count = floor(laps);
+    float fraction = laps - count;
+    int leftBin = floor(fraction * binCount);
+    float left = bin[leftBin];
+    float right = bin[leftBin + 1];
+    float rightWeight = fraction * binCount - leftBin;
+    return count + left * (1 - rightWeight) + right * rightWeight;
+  }
+};
+
+const int minSamples = 4;
 const int maxSamples = 50;
 
 Weights weights(1.0/binCount);
+LookupTable lookupTable;
 
 enum LapDirection {
   none = 0,
@@ -82,7 +112,7 @@ int weightUpdateCount = 0;
 int nextBin = 0;
 bool foundLap = false;
 
-void updateWeights(float laps) {
+void __not_in_flash_func(updateWeights)(float laps) {
   if (foundLap) {
     if (partial.total >= minSamples && partial.total <= maxSamples) {
       weights.update(partial, 0.02);
@@ -128,7 +158,7 @@ struct WeightMetrics {
   float binValue;
 };
 
-WeightMetrics calculateWeights(float laps) {
+WeightMetrics __not_in_flash_func(adjustWeights)(float laps) {
   updateWeights(laps);
   WeightMetrics result;
   result.updateCount = weightUpdateCount;
@@ -136,6 +166,16 @@ WeightMetrics calculateWeights(float laps) {
   result.binValue = weights.get(nextBin);
   nextBin = (nextBin + 1) % binCount;
   return result;
+}
+
+int seenWeightUpdates = 0;
+
+float __not_in_flash_func(adjustLaps)(float laps) {
+  if (seenWeightUpdates < weightUpdateCount) {
+      lookupTable.setWeights(weights.bin);
+      seenWeightUpdates = weightUpdateCount;
+  }
+  return lookupTable.adjust(laps);
 }
 
 } // calibration
