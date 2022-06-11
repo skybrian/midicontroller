@@ -72,7 +72,6 @@ void __not_in_flash_func(runReadLoop)() {
   now = -1000;
   long nextReadTime = 0;
   while (true) {
-    yield();
     while (((long)now) - nextReadTime < -110) {}
     readIntoQueue(nextReadTime);
     nextReadTime += samplePeriod;

@@ -40,7 +40,8 @@ public:
     }
   }
 
-  void __not_in_flash_func(addRange)(float start, float end, float val) {
+  // returns number of bins changed
+  int __not_in_flash_func(addRange)(float start, float end, float val) {
     if (end < start) {
       float tmp = start;
       start = end;
@@ -52,7 +53,7 @@ public:
     int endbin = floor(end);
     if (startbin == endbin) {
       add(startbin, val);
-      return;
+      return 1;
     }
     float weight = val/(end - start);
     add(startbin, weight * (ceil(start) - start));
@@ -60,6 +61,7 @@ public:
     for (int i = startbin + 1; i < endbin; i++) {
       add(i, weight);
     }
+    return endbin - startbin + 1;
   }
 };
 
@@ -93,7 +95,6 @@ public:
 };
 
 const int minSamples = 4;
-const int maxSamples = 50;
 
 Weights weights(1.0/binCount);
 LookupTable lookupTable;
@@ -114,7 +115,7 @@ bool foundLap = false;
 
 void __not_in_flash_func(updateWeights)(float laps) {
   if (foundLap) {
-    if (partial.total >= minSamples && partial.total <= maxSamples) {
+    if (partial.total >= minSamples) {
       weights.update(partial, 0.02);
       weightUpdateCount++;
     }
@@ -148,7 +149,11 @@ void __not_in_flash_func(updateWeights)(float laps) {
       return;
     }
   }
-  partial.addRange(prevPos, laps, 1);
+  if (partial.addRange(prevPos, laps, 1) < 2) {
+    // too slow
+    lapDirection = none;
+    return;
+  }
   prevPos = laps;
 }
 

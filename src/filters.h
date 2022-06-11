@@ -69,7 +69,8 @@ class MovingAverageFilter {
     sum = 0;
   }
 
-  float update(float v) {
+  float __not_in_flash_func(update)(float v) {
+    if (isnan(v) || isinf(v)) return v;
     sum += v;
     sum -= queue[next];
     queue[next] = v;

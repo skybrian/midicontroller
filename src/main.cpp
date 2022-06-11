@@ -1,10 +1,30 @@
 #include <Arduino.h>
 #include <Adafruit_TinyUSB.h>
+#include <MIDI.h>
+
 #include <elapsedMillis.h>
 #include <math.h>
 
 #include "sensor.h"
 #include "calibration.h"
+#include "filters.h"
+
+Adafruit_USBD_MIDI midiDev;
+MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, midiDev, MID);
+
+midi::DataByte prevControlValue = -1;
+
+void __not_in_flash_func(sendControlChange)(int value) {
+  if (value < 0) value = 0;
+  if (value > 127) value = 127;
+  midi::DataByte val = value;
+  if (val == prevControlValue) {
+    return;
+  }
+  //Serial.println(val);
+  MID.sendControlChange(1, val, 1);
+  prevControlValue = val;
+}
 
 struct LapMetrics {
   float theta; // in degrees of phase; 360 degrees = 1 grating
@@ -12,11 +32,14 @@ struct LapMetrics {
   float laps;
   float adjustedLaps;
   float adjustedDelta;
+  float smoothDelta;
+  int midiVelocity;
 };
 
 int laps = -1;
 float prevTheta = nanf("");
 float prevAdjustedLaps = nanf("");
+MovingAverageFilter<9> smoothDelta;
 
 LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
@@ -36,18 +59,23 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     lm.adjustedLaps = calibration::adjustLaps(lm.laps);
     lm.adjustedDelta = (lm.adjustedLaps - prevAdjustedLaps) * 360.0;
     prevAdjustedLaps = lm.adjustedLaps;
+
+    lm.smoothDelta = smoothDelta.update(lm.adjustedDelta);
+    lm.midiVelocity = floor(abs(lm.smoothDelta) * 0.5);
     return lm;
 }
 
 void printHeader() {
-  Serial.println("AdjustedLaps,Laps,AdjustedDelta,Delta,Theta,WeightUpdates,Bin,Weight,A,B,Jitter,A Read Time,B Read Time,Total Read Time");
+  Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,Delta,AdjustedLaps,Laps,Theta,WeightUpdates,Bin,Weight,A,B,Jitter,A Read Time,B Read Time,Total Read Time");
 }
 
-void printLine(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) {
-  Serial.print(lm.adjustedLaps, 4); Serial.print(", ");
-  Serial.print(lm.laps, 4); Serial.print(", ");
+void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) {
+  Serial.print(lm.midiVelocity); Serial.print(", ");
+  Serial.print(lm.smoothDelta); Serial.print(", ");
   Serial.print(lm.adjustedDelta); Serial.print(", ");
   Serial.print(lm.delta); Serial.print(", ");
+  Serial.print(lm.adjustedLaps, 4); Serial.print(", ");
+  Serial.print(lm.laps, 4); Serial.print(", ");
   Serial.print(lm.theta); Serial.print(", ");
 
   Serial.print(wm.updateCount); Serial.print(", ");
@@ -64,18 +92,23 @@ void printLine(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) 
 }
 
 void setup() {
+  MID.begin();
   sensor::begin();
 }
 
 void loop() {
   while (!Serial.dtr()) {
-    sensor::next();
+    sensor::Reading reading = sensor::next();
+    LapMetrics lm = calculateLaps(reading);
+    sendControlChange(lm.midiVelocity);
+    calibration::adjustWeights(lm.laps);
   }
 
   printHeader();
   while (Serial.dtr()) {
     sensor::Reading reading = sensor::next();
     LapMetrics lm = calculateLaps(reading);
+    sendControlChange(lm.midiVelocity);
     calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
     printLine(lm, wm, reading);
   }
