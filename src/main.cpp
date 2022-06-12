@@ -39,7 +39,7 @@ MovingAverageFilter<9> smoothDelta;
 
 LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
-    lm.laps = reading.laps + reading.theta / sensor::ticksPerTurn;
+    lm.laps = reading.laps + reading.theta / ((float)sensor::ticksPerTurn);
 
     lm.adjustedLaps = calibration::adjustLaps(lm.laps);
     lm.adjustedDelta = (lm.adjustedLaps - prevAdjustedLaps) * 360.0;
@@ -69,7 +69,7 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
   Serial.print(r.a); Serial.print(", ");
   Serial.print(r.b); Serial.print(", ");
   Serial.print(r.theta); Serial.print(", ");
-  Serial.print(r.thetaChange); Serial.print(", ");
+  Serial.print(r.thetaChange * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
   Serial.print(r.idle); Serial.print(", ");
   Serial.print(r.jitter); Serial.print(", ");
   Serial.print(r.aReadTime); Serial.print(", ");

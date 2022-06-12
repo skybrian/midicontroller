@@ -6,7 +6,8 @@ const int aSensorPin = A0;
 const int bSensorPin = A1;
 
 // times in microseconds
-const int samplePeriod = 5000;
+const int samplePeriod = 1000;
+const int samplesPerReport = 5;
 
 // Messages for multi-core fifo.
 // See: https://arduino-pico.readthedocs.io/en/latest/multicore.html#communicating-between-cores
@@ -57,6 +58,8 @@ elapsedMicros sinceIdle;
 
 int prevTheta = 0;
 int laps = 0;
+int samplesSinceReport = 0;
+int thetaChangeSinceReport = 0;
 
 static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
   Reading r;
@@ -86,12 +89,20 @@ static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
     r.thetaChange -= ticksPerTurn;
   }
   r.laps = laps;
-
   prevTheta = r.theta;
+
+  samplesSinceReport++;
+  thetaChangeSinceReport += r.thetaChange;
   sinceIdle = 0;
-  while (rp2040.fifo.pop() != READY) {}
-  queuedSample = r;
-  rp2040.fifo.push(SENT);
+
+  if (samplesSinceReport >= samplesPerReport) {
+    r.thetaChange = thetaChangeSinceReport;
+    samplesSinceReport = 0;
+    thetaChangeSinceReport = 0;
+    while (rp2040.fifo.pop() != READY) {}
+    queuedSample = r;
+    rp2040.fifo.push(SENT);
+  }
 }
 
 void __not_in_flash_func(runReadLoop)() {
