@@ -33,15 +33,15 @@ public:
   }
 
   void __not_in_flash_func(update)(Weights& next, float nextWeight) {
-    float oldWeight = 1 - nextWeight;
+    float decay = 1 - nextWeight;
     nextWeight = nextWeight / next.total;
     for (int i = 0; i < binCount; i++) {
-      bin[i] = bin[i] * oldWeight + next.bin[i] * nextWeight;
+      bin[i] = bin[i] * decay + next.bin[i] * nextWeight;
     }
   }
 
-  // returns number of bins changed
-  int __not_in_flash_func(addRange)(float start, float end, float val) {
+  // returns range of bins changed
+  float __not_in_flash_func(addRange)(float start, float end, float val) {
     if (end < start) {
       float tmp = start;
       start = end;
@@ -53,21 +53,21 @@ public:
     int endbin = floor(end);
     if (startbin == endbin) {
       add(startbin, val);
-      return 1;
+      return end - start;
     }
-    float weight = val/(end - start);
-    add(startbin, weight * (ceil(start) - start));
-    add(endbin, weight * (end - floor(end)));
+    float valPerBin = val/(end - start);
+    add(startbin, valPerBin * (ceil(start) - start));
+    add(endbin, valPerBin * (end - floor(end)));
     for (int i = startbin + 1; i < endbin; i++) {
-      add(i, weight);
+      add(i, valPerBin);
     }
-    return endbin - startbin + 1;
+    return end - start;
   }
 };
 
 class LookupTable {
-  float bin[binCount + 1];
 public:
+  float bin[binCount + 1];
   LookupTable() {
     float scale = 1.0/binCount;
     for (int i = 0; i <= binCount; i++) {
@@ -94,7 +94,7 @@ public:
   }
 };
 
-const int minSamples = 4;
+const int minSamples = binCount/2;
 
 Weights weights(1.0/binCount);
 LookupTable lookupTable;
@@ -149,7 +149,8 @@ void __not_in_flash_func(updateWeights)(float laps) {
       return;
     }
   }
-  if (partial.addRange(prevPos, laps, 1) < 2) {
+  float rangeChanged = partial.addRange(prevPos, laps, 1);
+  if (rangeChanged < 0.5) {
     // too slow
     lapDirection = none;
     return;
@@ -160,7 +161,8 @@ void __not_in_flash_func(updateWeights)(float laps) {
 struct WeightMetrics {
   int updateCount;
   int bin;
-  float binValue;
+  float binWeight;
+  float binAdjustment;
 };
 
 WeightMetrics __not_in_flash_func(adjustWeights)(float laps) {
@@ -168,7 +170,8 @@ WeightMetrics __not_in_flash_func(adjustWeights)(float laps) {
   WeightMetrics result;
   result.updateCount = weightUpdateCount;
   result.bin = nextBin;
-  result.binValue = weights.get(nextBin);
+  result.binWeight = weights.get(nextBin);
+  result.binAdjustment = lookupTable.bin[nextBin];
   nextBin = (nextBin + 1) % binCount;
   return result;
 }

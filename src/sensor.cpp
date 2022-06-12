@@ -25,24 +25,44 @@ Reading __not_in_flash_func(next)() {
   return result;
 }
 
-static Reading __not_in_flash_func(readSample)() {
-  Reading out;
-
+static void __not_in_flash_func(readSample)(Reading& out) {
   elapsedMicros now = 0;
+
   out.a = analogRead(aSensorPin);
   out.aReadTime = now;
 
   out.b = analogRead(bSensorPin);
   out.bReadTime = now - out.aReadTime;
+}
 
-  return out;
+const int halfTurn = ticksPerTurn/2;
+const int quarterTurn = ticksPerTurn/4;
+const int eighthTurn = ticksPerTurn/8;
+
+static int __not_in_flash_func(calculatePhase)(int x, int y) {
+  // A very rough approximation of atan2. It will be adjusted via calibration later so it shouldn't matter.
+  if (x >= abs(y)) {
+    return (eighthTurn * y)/x;
+  } else if (y >= abs(x)) {
+    return quarterTurn + (-eighthTurn * x)/y;
+  } else if (-y >= abs(x)) {
+    return -quarterTurn + (-eighthTurn * x)/y;
+  } else {
+    return halfTurn + (eighthTurn * y)/x;
+  }
 }
 
 elapsedMicros now;
+elapsedMicros sinceIdle;
+
+int prevTheta = 0;
+int laps = 0;
 
 static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
+  Reading r;
+  r.idle = sinceIdle;
   rp2040.idleOtherCore();
-  readSample(); // warmup
+  readSample(r); // warmup
 
   long readStart;
   int jitter;
@@ -52,11 +72,23 @@ static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
   }
   while (jitter < 0);
 
-  Reading r = readSample();
+  readSample(r);
   r.jitter = jitter;
-  r.totalReadTime = ((long)now) - readStart;
   rp2040.resumeOtherCore();
+  r.totalReadTime = ((long)now) - readStart;
+  r.theta = calculatePhase(r.a - 300, r.b - 300);
+  r.thetaChange = r.theta - prevTheta;
+  if (r.thetaChange < -halfTurn) {
+    laps++;
+    r.thetaChange += ticksPerTurn;
+  } else if (r.thetaChange > halfTurn) {
+    laps--;
+    r.thetaChange -= ticksPerTurn;
+  }
+  r.laps = laps;
 
+  prevTheta = r.theta;
+  sinceIdle = 0;
   while (rp2040.fifo.pop() != READY) {}
   queuedSample = r;
   rp2040.fifo.push(SENT);
@@ -65,9 +97,13 @@ static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
 void __not_in_flash_func(runReadLoop)() {
 
   // warmup
+  Reading r;
   rp2040.idleOtherCore();
-  for (int i =0; i <10; i++) sensor::readSample();
+  for (int i =0; i <10; i++) {
+    sensor::readSample(r);
+  }
   rp2040.resumeOtherCore();
+  prevTheta = calculatePhase(r.a - 300, r.b - 300);
 
   now = -1000;
   long nextReadTime = 0;

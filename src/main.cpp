@@ -27,8 +27,6 @@ void __not_in_flash_func(sendControlChange)(int value) {
 }
 
 struct LapMetrics {
-  float theta; // in degrees of phase; 360 degrees = 1 grating
-  float delta; // in degrees
   float laps;
   float adjustedLaps;
   float adjustedDelta;
@@ -36,25 +34,12 @@ struct LapMetrics {
   int midiVelocity;
 };
 
-int laps = -1;
-float prevTheta = nanf("");
 float prevAdjustedLaps = nanf("");
 MovingAverageFilter<9> smoothDelta;
 
 LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
-    lm.theta = atan2(reading.b - 300, reading.a - 300) * 360.0 / (2 * PI);
-    float delta = lm.theta - prevTheta;
-    prevTheta = lm.theta;
-    if (delta < -180.0) {
-      laps++;
-      delta += 360.0;
-    } else if (delta > 180.0) {
-      laps--;
-      delta -= 360.0;
-    }
-    lm.delta = delta;
-    lm.laps = laps + lm.theta / 360.0;
+    lm.laps = reading.laps + reading.theta / sensor::ticksPerTurn;
 
     lm.adjustedLaps = calibration::adjustLaps(lm.laps);
     lm.adjustedDelta = (lm.adjustedLaps - prevAdjustedLaps) * 360.0;
@@ -66,24 +51,26 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
 }
 
 void printHeader() {
-  Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,Delta,AdjustedLaps,Laps,Theta,WeightUpdates,Bin,Weight,A,B,Jitter,A Read Time,B Read Time,Total Read Time");
+  Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,idle,jitter,aReadTime,bReadTime,totalReadTime");
 }
 
 void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) {
   Serial.print(lm.midiVelocity); Serial.print(", ");
   Serial.print(lm.smoothDelta); Serial.print(", ");
   Serial.print(lm.adjustedDelta); Serial.print(", ");
-  Serial.print(lm.delta); Serial.print(", ");
   Serial.print(lm.adjustedLaps, 4); Serial.print(", ");
   Serial.print(lm.laps, 4); Serial.print(", ");
-  Serial.print(lm.theta); Serial.print(", ");
 
   Serial.print(wm.updateCount); Serial.print(", ");
   Serial.print(wm.bin); Serial.print(", ");
-  Serial.print(wm.binValue, 4); Serial.print(", ");
+  Serial.print(wm.binWeight, 4); Serial.print(", ");
+  Serial.print(wm.binAdjustment, 4); Serial.print(", ");
 
   Serial.print(r.a); Serial.print(", ");
   Serial.print(r.b); Serial.print(", ");
+  Serial.print(r.theta); Serial.print(", ");
+  Serial.print(r.thetaChange); Serial.print(", ");
+  Serial.print(r.idle); Serial.print(", ");
   Serial.print(r.jitter); Serial.print(", ");
   Serial.print(r.aReadTime); Serial.print(", ");
   Serial.print(r.bReadTime); Serial.print(", ");

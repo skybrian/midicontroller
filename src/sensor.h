@@ -5,10 +5,16 @@
 
 namespace sensor {
 
+const int ticksPerTurn = 720;
+
 struct Reading {
   int a;
   int b;
+  int theta;
+  int thetaChange;
+  int laps;
 
+  int idle;
   int jitter;
   int aReadTime;
   int bReadTime;
