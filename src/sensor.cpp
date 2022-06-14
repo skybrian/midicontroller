@@ -80,6 +80,7 @@ static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
   rp2040.resumeOtherCore();
   r.totalReadTime = ((long)now) - readStart;
   r.theta = calculatePhase(r.a - 300, r.b - 300);
+  if (r.theta < 0) r.theta += ticksPerTurn;
   r.thetaChange = r.theta - prevTheta;
   if (r.thetaChange < -halfTurn) {
     laps++;

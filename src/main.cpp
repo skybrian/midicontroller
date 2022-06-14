@@ -68,7 +68,7 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
 
   Serial.print(r.a); Serial.print(", ");
   Serial.print(r.b); Serial.print(", ");
-  Serial.print(r.theta); Serial.print(", ");
+  Serial.print(r.theta * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
   Serial.print(r.thetaChange * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
   Serial.print(r.idle); Serial.print(", ");
   Serial.print(r.jitter); Serial.print(", ");
