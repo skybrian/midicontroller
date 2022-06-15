@@ -52,7 +52,7 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
 
 void printHeader() {
   Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
-      "jitter,aReadTime,bReadTime,totalReadTime,maxJitter,minIdle");
+      "jitter,aReadTime,bReadTime,totalReadTime,maxJitter,minIdle,sendTime");
   Serial.flush();
 }
 
@@ -77,7 +77,8 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
   Serial.print(r.last.bReadTime); Serial.print(", ");
   Serial.print(r.last.totalReadTime); Serial.print(", ");
   Serial.print(r.maxJitter); Serial.print(", ");
-  Serial.println(r.minIdle);
+  Serial.print(r.minIdle); Serial.print(", ");
+  Serial.println(r.sendTime);
   Serial.flush();
 }
 
@@ -86,21 +87,24 @@ void setup() {
   sensor::begin();
 }
 
+sensor::Report buffer;
+sensor::Report* current = &buffer;
+
 void loop() {
   while (!Serial.dtr()) {
-    sensor::Report rep = sensor::next();
-    LapMetrics lm = calculateLaps(rep.last);
+    current = sensor::takeReport(current);
+    LapMetrics lm = calculateLaps(current->last);
     sendControlChange(lm.midiVelocity);
     calibration::adjustWeights(lm.laps);
   }
 
   printHeader();
   while (Serial.dtr()) {
-    sensor::Report rep = sensor::next();
-    LapMetrics lm = calculateLaps(rep.last);
+    current = sensor::takeReport(current);
+    LapMetrics lm = calculateLaps(current->last);
     sendControlChange(lm.midiVelocity);
     calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
-    printLine(lm, wm, rep);
+    printLine(lm, wm, *current);
   }
 }
 

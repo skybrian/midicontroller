@@ -2,6 +2,7 @@
 #define SENSOR_H
 
 #include <elapsedMillis.h>
+#include <limits.h>
 
 namespace sensor {
 
@@ -19,17 +20,26 @@ struct Reading {
   int totalReadTime;
 };
 
+
 struct Report {
   Reading last;
   int samples;
   int thetaChange;
   int maxJitter;
   int minIdle;
+  int sendTime;
+
+  void clear() {
+    samples = 0;
+    thetaChange = 0;
+    maxJitter = 0;
+    minIdle = INT_MAX;
+  }
 };
 
 void begin();
 
-Report next();
+Report* takeReport(Report* nextDest);
 
 void runReadLoop();
 

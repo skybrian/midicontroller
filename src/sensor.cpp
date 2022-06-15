@@ -13,23 +13,39 @@ const int samplesPerReport = 5;
 // See: https://arduino-pico.readthedocs.io/en/latest/multicore.html#communicating-between-cores
 enum { READY, SENT };
 
-static Report queuedSample;
+static Report* dest = 0;
+
+static Report buffer1;
 
 void begin() {
+  dest = &buffer1;
   rp2040.fifo.push(READY);
 }
 
-Report __not_in_flash_func(next)() {
+Report* __not_in_flash_func(takeReport)(Report* nextDest) {
   while (rp2040.fifo.pop() != SENT) {}
-  Report result = queuedSample;
+
+  Report* result = dest;
+  dest = nextDest;
+
   rp2040.fifo.push(READY);
+
   return result;
 }
 
-static void __not_in_flash_func(push)(Report &r) {
+static Report* __not_in_flash_func(sendReport)(Report* response) {
+  elapsedMicros sinceStart;
+
   while (rp2040.fifo.pop() != READY) {}
-  queuedSample = r;
+
+
+  Report* next = dest;
+  dest = response;
+  dest->sendTime = sinceStart;
   rp2040.fifo.push(SENT);
+
+  next->clear();
+  return next;
 }
 
 static void __not_in_flash_func(takeReading)(Reading& out) {
@@ -119,6 +135,8 @@ static void __not_in_flash_func(readAndCalculate)(long nextReadTime, Report& rep
   sinceIdle = 0;
 }
 
+static Report buffer2;
+
 void __not_in_flash_func(runReadLoop)() {
 
   // warmup
@@ -133,17 +151,15 @@ void __not_in_flash_func(runReadLoop)() {
   // take readings at fixed intervals
   now = -1000;
   long nextReadTime = 0;
+
+  Report* rep = &buffer2;
+  rep->clear();
   while (true) {
-    Report rep;
-    rep.samples = 0;
-    rep.thetaChange = 0;
-    rep.maxJitter = 0;
-    rep.minIdle = samplePeriod;
-    while(rep.samples < samplesPerReport) {
-      readAndCalculate(nextReadTime, rep);
+    while(rep->samples < samplesPerReport) {
+      readAndCalculate(nextReadTime, *rep);
       nextReadTime += samplePeriod;
     }
-    push(rep);
+    rep = sendReport(rep);
   }
 }
 
