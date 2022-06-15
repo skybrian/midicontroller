@@ -5,7 +5,8 @@
 
 namespace calibration {
 
-const int binCount = 36;
+const int binCount = 72;
+const int minSamples = 8;
 
 class Weights {
 public:
@@ -93,8 +94,6 @@ public:
     return count + left * (1 - rightWeight) + right * rightWeight;
   }
 };
-
-const int minSamples = binCount/2;
 
 Weights weights(1.0/binCount);
 LookupTable lookupTable;
@@ -184,6 +183,10 @@ float __not_in_flash_func(adjustLaps)(float laps) {
       seenWeightUpdates = weightUpdateCount;
   }
   return lookupTable.adjust(laps);
+}
+
+bool calibrated() {
+  return seenWeightUpdates >= 5;
 }
 
 } // calibration
