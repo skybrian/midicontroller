@@ -14,11 +14,12 @@ struct Reading {
   int thetaChange;
   int laps;
 
-  int idle;
   int jitter;
   int aReadTime;
   int bReadTime;
   int totalReadTime;
+  int maxIdle;
+  int minIdle;
 };
 
 void begin();

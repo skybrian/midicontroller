@@ -26,7 +26,13 @@ Reading __not_in_flash_func(next)() {
   return result;
 }
 
-static void __not_in_flash_func(readSample)(Reading& out) {
+static void __not_in_flash_func(push)(Reading &r) {
+  while (rp2040.fifo.pop() != READY) {}
+  queuedSample = r;
+  rp2040.fifo.push(SENT);
+}
+
+static void __not_in_flash_func(takeReading)(Reading& out) {
   elapsedMicros now = 0;
 
   out.a = analogRead(aSensorPin);
@@ -36,11 +42,31 @@ static void __not_in_flash_func(readSample)(Reading& out) {
   out.bReadTime = now - out.aReadTime;
 }
 
+elapsedMicros now;
+
+static void __not_in_flash_func(takeTimedReading)(int nextReadTime, Reading& out) {
+  rp2040.idleOtherCore();
+  takeReading(out); // warmup
+
+  long readStart;
+  int jitter;
+  do {
+    readStart = now;
+    jitter = ((long)now) - nextReadTime;
+  }
+  while (jitter < 0);
+
+  takeReading(out);
+  out.jitter = jitter;
+  rp2040.resumeOtherCore();
+  out.totalReadTime = ((long)now) - readStart;
+}
+
 const int halfTurn = ticksPerTurn/2;
 const int quarterTurn = ticksPerTurn/4;
 const int eighthTurn = ticksPerTurn/8;
 
-static int __not_in_flash_func(calculatePhase)(int x, int y) {
+static int __not_in_flash_func(approximatePhase)(int x, int y) {
   // A very rough approximation of atan2. It will be adjusted via calibration later so it shouldn't matter.
   if (x >= abs(y)) {
     return (eighthTurn * y)/x;
@@ -53,34 +79,10 @@ static int __not_in_flash_func(calculatePhase)(int x, int y) {
   }
 }
 
-elapsedMicros now;
-elapsedMicros sinceIdle;
-
-int prevTheta = 0;
 int laps = 0;
-int samplesSinceReport = 0;
-int thetaChangeSinceReport = 0;
+int prevTheta = 0;
 
-static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
-  Reading r;
-  r.idle = sinceIdle;
-  rp2040.idleOtherCore();
-  readSample(r); // warmup
-
-  long readStart;
-  int jitter;
-  do {
-    readStart = now;
-    jitter = ((long)now) - nextReadTime;
-  }
-  while (jitter < 0);
-
-  readSample(r);
-  r.jitter = jitter;
-  rp2040.resumeOtherCore();
-  r.totalReadTime = ((long)now) - readStart;
-  r.theta = calculatePhase(r.a - 300, r.b - 300);
-  if (r.theta < 0) r.theta += ticksPerTurn;
+static void __not_in_flash_func(countLaps)(Reading &r) {
   r.thetaChange = r.theta - prevTheta;
   if (r.thetaChange < -halfTurn) {
     laps++;
@@ -91,18 +93,52 @@ static void __not_in_flash_func(readIntoQueue)(long nextReadTime) {
   }
   r.laps = laps;
   prevTheta = r.theta;
+}
+
+static int __not_in_flash_func(calculatePhase)(int x, int y) {
+  int theta = approximatePhase(x, y);
+  if (theta < 0) theta += ticksPerTurn;
+  return theta;
+}
+
+elapsedMicros sinceIdle;
+
+int samplesSinceReport = 0;
+int thetaChangeSinceReport = 0;
+int maxIdle = 0;
+int minIdle = samplePeriod;
+
+static void __not_in_flash_func(readAndSend)(long nextReadTime) {
+  while (((long)now) - nextReadTime < -110) {}
+  int idle = sinceIdle;
+  Reading r;
+  takeTimedReading(nextReadTime, r);
+
+  // Do calculations on the new reading
+
+  r.theta = calculatePhase(r.a - 300, r.b - 300);
+  countLaps(r);
 
   samplesSinceReport++;
   thetaChangeSinceReport += r.thetaChange;
+
+  if (idle > maxIdle) maxIdle = idle;
+  if (idle < minIdle) minIdle = idle;
+
   sinceIdle = 0;
+
+  // Maybe send it
 
   if (samplesSinceReport >= samplesPerReport) {
     r.thetaChange = thetaChangeSinceReport;
-    samplesSinceReport = 0;
+    r.minIdle = minIdle;
+    r.maxIdle = maxIdle;
+    push(r);
     thetaChangeSinceReport = 0;
-    while (rp2040.fifo.pop() != READY) {}
-    queuedSample = r;
-    rp2040.fifo.push(SENT);
+    maxIdle = 0;
+    minIdle = samplePeriod;
+
+    samplesSinceReport = 0;
   }
 }
 
@@ -112,16 +148,16 @@ void __not_in_flash_func(runReadLoop)() {
   Reading r;
   rp2040.idleOtherCore();
   for (int i =0; i <10; i++) {
-    sensor::readSample(r);
+    sensor::takeReading(r);
   }
   rp2040.resumeOtherCore();
   prevTheta = calculatePhase(r.a - 300, r.b - 300);
 
+  // take readings at fixed intervals
   now = -1000;
   long nextReadTime = 0;
   while (true) {
-    while (((long)now) - nextReadTime < -110) {}
-    readIntoQueue(nextReadTime);
+    readAndSend(nextReadTime);
     nextReadTime += samplePeriod;
   }
 }

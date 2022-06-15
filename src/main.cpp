@@ -51,7 +51,9 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
 }
 
 void printHeader() {
-  Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,idle,jitter,aReadTime,bReadTime,totalReadTime");
+  Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
+      "jitter,aReadTime,bReadTime,totalReadTime,maxIdle,minIdle");
+  Serial.flush();
 }
 
 void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) {
@@ -70,11 +72,12 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
   Serial.print(r.b); Serial.print(", ");
   Serial.print(r.theta * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
   Serial.print(r.thetaChange * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
-  Serial.print(r.idle); Serial.print(", ");
   Serial.print(r.jitter); Serial.print(", ");
   Serial.print(r.aReadTime); Serial.print(", ");
   Serial.print(r.bReadTime); Serial.print(", ");
-  Serial.println(r.totalReadTime);
+  Serial.print(r.totalReadTime); Serial.print(", ");
+  Serial.print(r.maxIdle); Serial.print(", ");
+  Serial.println(r.minIdle);
   Serial.flush();
 }
 
