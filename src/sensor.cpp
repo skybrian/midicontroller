@@ -13,20 +13,20 @@ const int samplesPerReport = 5;
 // See: https://arduino-pico.readthedocs.io/en/latest/multicore.html#communicating-between-cores
 enum { READY, SENT };
 
-static Reading queuedSample;
+static Report queuedSample;
 
 void begin() {
   rp2040.fifo.push(READY);
 }
 
-Reading __not_in_flash_func(next)() {
+Report __not_in_flash_func(next)() {
   while (rp2040.fifo.pop() != SENT) {}
-  Reading result = queuedSample;
+  Report result = queuedSample;
   rp2040.fifo.push(READY);
   return result;
 }
 
-static void __not_in_flash_func(push)(Reading &r) {
+static void __not_in_flash_func(push)(Report &r) {
   while (rp2040.fifo.pop() != READY) {}
   queuedSample = r;
   rp2040.fifo.push(SENT);
@@ -82,17 +82,18 @@ static int __not_in_flash_func(approximatePhase)(int x, int y) {
 int laps = 0;
 int prevTheta = 0;
 
-static void __not_in_flash_func(countLaps)(Reading &r) {
-  r.thetaChange = r.theta - prevTheta;
-  if (r.thetaChange < -halfTurn) {
+static void __not_in_flash_func(countLaps)(Report &rep) {
+  int thetaChange = rep.last.theta - prevTheta;
+  if (thetaChange < -halfTurn) {
     laps++;
-    r.thetaChange += ticksPerTurn;
-  } else if (r.thetaChange > halfTurn) {
+    thetaChange += ticksPerTurn;
+  } else if (thetaChange > halfTurn) {
     laps--;
-    r.thetaChange -= ticksPerTurn;
+    thetaChange -= ticksPerTurn;
   }
-  r.laps = laps;
-  prevTheta = r.theta;
+  rep.last.laps = laps;
+  prevTheta = rep.last.theta;
+  rep.thetaChange += thetaChange;
 }
 
 static int __not_in_flash_func(calculatePhase)(int x, int y) {
@@ -103,43 +104,19 @@ static int __not_in_flash_func(calculatePhase)(int x, int y) {
 
 elapsedMicros sinceIdle;
 
-int samplesSinceReport = 0;
-int thetaChangeSinceReport = 0;
-int maxIdle = 0;
-int minIdle = samplePeriod;
-
-static void __not_in_flash_func(readAndSend)(long nextReadTime) {
+static void __not_in_flash_func(readAndCalculate)(long nextReadTime, Report& rep) {
   while (((long)now) - nextReadTime < -110) {}
   int idle = sinceIdle;
-  Reading r;
-  takeTimedReading(nextReadTime, r);
+  takeTimedReading(nextReadTime, rep.last);
 
-  // Do calculations on the new reading
+  rep.last.theta = calculatePhase(rep.last.a - 300, rep.last.b - 300);
+  countLaps(rep);
+  rep.samples++;
 
-  r.theta = calculatePhase(r.a - 300, r.b - 300);
-  countLaps(r);
-
-  samplesSinceReport++;
-  thetaChangeSinceReport += r.thetaChange;
-
-  if (idle > maxIdle) maxIdle = idle;
-  if (idle < minIdle) minIdle = idle;
+  if (rep.last.jitter > rep.maxJitter) rep.maxJitter = rep.last.jitter;
+  if (idle < rep.minIdle) rep.minIdle = idle;
 
   sinceIdle = 0;
-
-  // Maybe send it
-
-  if (samplesSinceReport >= samplesPerReport) {
-    r.thetaChange = thetaChangeSinceReport;
-    r.minIdle = minIdle;
-    r.maxIdle = maxIdle;
-    push(r);
-    thetaChangeSinceReport = 0;
-    maxIdle = 0;
-    minIdle = samplePeriod;
-
-    samplesSinceReport = 0;
-  }
 }
 
 void __not_in_flash_func(runReadLoop)() {
@@ -157,8 +134,16 @@ void __not_in_flash_func(runReadLoop)() {
   now = -1000;
   long nextReadTime = 0;
   while (true) {
-    readAndSend(nextReadTime);
-    nextReadTime += samplePeriod;
+    Report rep;
+    rep.samples = 0;
+    rep.thetaChange = 0;
+    rep.maxJitter = 0;
+    rep.minIdle = samplePeriod;
+    while(rep.samples < samplesPerReport) {
+      readAndCalculate(nextReadTime, rep);
+      nextReadTime += samplePeriod;
+    }
+    push(rep);
   }
 }
 

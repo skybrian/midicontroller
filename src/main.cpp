@@ -52,11 +52,11 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
 
 void printHeader() {
   Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
-      "jitter,aReadTime,bReadTime,totalReadTime,maxIdle,minIdle");
+      "jitter,aReadTime,bReadTime,totalReadTime,maxJitter,minIdle");
   Serial.flush();
 }
 
-void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Reading r) {
+void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Report r) {
   Serial.print(lm.midiVelocity); Serial.print(", ");
   Serial.print(lm.smoothDelta); Serial.print(", ");
   Serial.print(lm.adjustedDelta); Serial.print(", ");
@@ -68,15 +68,15 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
   Serial.print(wm.binWeight, 4); Serial.print(", ");
   Serial.print(wm.binAdjustment, 4); Serial.print(", ");
 
-  Serial.print(r.a); Serial.print(", ");
-  Serial.print(r.b); Serial.print(", ");
-  Serial.print(r.theta * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
+  Serial.print(r.last.a); Serial.print(", ");
+  Serial.print(r.last.b); Serial.print(", ");
+  Serial.print(r.last.theta * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
   Serial.print(r.thetaChange * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
-  Serial.print(r.jitter); Serial.print(", ");
-  Serial.print(r.aReadTime); Serial.print(", ");
-  Serial.print(r.bReadTime); Serial.print(", ");
-  Serial.print(r.totalReadTime); Serial.print(", ");
-  Serial.print(r.maxIdle); Serial.print(", ");
+  Serial.print(r.last.jitter); Serial.print(", ");
+  Serial.print(r.last.aReadTime); Serial.print(", ");
+  Serial.print(r.last.bReadTime); Serial.print(", ");
+  Serial.print(r.last.totalReadTime); Serial.print(", ");
+  Serial.print(r.maxJitter); Serial.print(", ");
   Serial.println(r.minIdle);
   Serial.flush();
 }
@@ -88,19 +88,19 @@ void setup() {
 
 void loop() {
   while (!Serial.dtr()) {
-    sensor::Reading reading = sensor::next();
-    LapMetrics lm = calculateLaps(reading);
+    sensor::Report rep = sensor::next();
+    LapMetrics lm = calculateLaps(rep.last);
     sendControlChange(lm.midiVelocity);
     calibration::adjustWeights(lm.laps);
   }
 
   printHeader();
   while (Serial.dtr()) {
-    sensor::Reading reading = sensor::next();
-    LapMetrics lm = calculateLaps(reading);
+    sensor::Report rep = sensor::next();
+    LapMetrics lm = calculateLaps(rep.last);
     sendControlChange(lm.midiVelocity);
     calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
-    printLine(lm, wm, reading);
+    printLine(lm, wm, rep);
   }
 }
 

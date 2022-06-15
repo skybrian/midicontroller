@@ -11,20 +11,25 @@ struct Reading {
   int a;
   int b;
   int theta;
-  int thetaChange;
   int laps;
 
   int jitter;
   int aReadTime;
   int bReadTime;
   int totalReadTime;
-  int maxIdle;
+};
+
+struct Report {
+  Reading last;
+  int samples;
+  int thetaChange;
+  int maxJitter;
   int minIdle;
 };
 
 void begin();
 
-Reading next();
+Report next();
 
 void runReadLoop();
 
