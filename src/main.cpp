@@ -9,22 +9,13 @@
 #include "calibration.h"
 #include "filters.h"
 
-Adafruit_USBD_MIDI midiDev;
-MIDI_CREATE_INSTANCE(Adafruit_USBD_MIDI, midiDev, MID);
+#include "bassboard.h"
+#include "bassmaps.h"
+#include "midi_out.h"
 
-midi::DataByte prevControlValue = -1;
-
-void __not_in_flash_func(sendControlChange)(int value) {
-  if (value < 0) value = 0;
-  if (value > 127) value = 127;
-  midi::DataByte val = value;
-  if (val == prevControlValue) {
-    return;
-  }
-  //Serial.println(val);
-  MID.sendControlChange(1, val, 1);
-  prevControlValue = val;
-}
+const int dataPin = 0;
+const int clockPin = 1;
+const int boardCount = 2;
 
 struct LapMetrics {
   float laps;
@@ -47,17 +38,47 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
 
     lm.smoothDelta = smoothDelta.update(lm.adjustedDelta);
 
-    lm.midiVelocity = calibration::calibrated() ? floor(abs(lm.smoothDelta) * 0.8) : 0;
+    lm.midiVelocity = calibration::calibrated() ? floor(abs(lm.smoothDelta) * 1.5) : 0;
     return lm;
 }
 
+struct BassReadings {
+  bassboard::Reading reading[boardCount];
+  music::Chord chord;
+  music::Chord bass;
+};
+
+midi::DataByte chordVelocity(music::Note n) {
+  return 99;
+}
+
+midi::DataByte bassVelocity(music::Note n) {
+  // Fade out the low and high end of the two octave range starting with bottomBass.
+  // Assumes that bass notes are actually part of an octave interval in that range.
+  // This makes jumping up or down an octave smoother.
+  // See: https://www.accordionists.info/threads/shepard-tone-illusion.5295/
+  int bottomFade = (bassmaps::bottomBass + 5) - n;
+  if (bottomFade > 0) {
+    return 100 - bottomFade * 18;
+  }
+  int topFade = n - (bassmaps::bottomBass + 24 + 7);
+  if (topFade > 0) {
+    return 100 - topFade * 18;
+  }
+  return 100;
+}
+
+midiOut::Channel<chordVelocity> chordChannel(1);
+midiOut::Channel<bassVelocity> bassChannel(2);
+
 void printHeader() {
   Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
+      "chordNotesOn,bassNotesOn,"
       "jitter,aReadTime,bReadTime,totalReadTime,maxJitter,minIdle,sendTime");
   Serial.flush();
 }
 
-void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Report r) {
+void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Report r, BassReadings& br) {
   Serial.print(lm.midiVelocity); Serial.print(", ");
   Serial.print(lm.smoothDelta); Serial.print(", ");
   Serial.print(lm.adjustedDelta); Serial.print(", ");
@@ -73,6 +94,10 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
   Serial.print(r.last.b); Serial.print(", ");
   Serial.print(r.last.theta * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
   Serial.print(r.thetaChange * 360.0 / sensor::ticksPerTurn); Serial.print(", ");
+
+  Serial.print(br.chord.countNotes()); Serial.print(",");
+  Serial.print(br.bass.countNotes()); Serial.print(",");
+
   Serial.print(r.last.jitter); Serial.print(", ");
   Serial.print(r.last.aReadTime); Serial.print(", ");
   Serial.print(r.last.bReadTime); Serial.print(", ");
@@ -83,29 +108,73 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
   Serial.flush();
 }
 
+bassboard::Board boards[boardCount] = {
+  bassboard::Board("lower", Wire, 32, &bassmaps::lowerChord, &bassmaps::lowerBass),
+  bassboard::Board("upper", Wire, 33, &bassmaps::upperChord, &bassmaps::upperBass)
+};
+
+elapsedMillis sinceValidRead;
+
+BassReadings pollBoards() {
+  BassReadings result;
+  result.chord = music::Chord();
+  result.bass = music::Chord();
+  bool allValid = true;
+  for (int b = 0; b < boardCount; b++) {
+    result.reading[b] = boards[b].poll();
+    result.chord = result.chord + result.reading[b].chord;
+    result.bass = result.bass + result.reading[b].bass;
+    if (!result.reading[b].valid) {
+      allValid = false;
+    }
+  }
+  if (allValid) {
+    sinceValidRead = 0;
+  }
+  return result;
+}
+
+bool logging = false;
+
 void setup() {
-  MID.begin();
+  midiOut::begin();
   sensor::begin();
+
+  Wire.setSDA(dataPin);
+  Wire.setSCL(clockPin);
+  Wire.setTimeout(50);
+
+  for (int b = 0; b < boardCount; b++) {
+    boards[b].begin();
+  }
 }
 
 sensor::Report buffer;
 sensor::Report* current = &buffer;
 
 void loop() {
-  while (!Serial.dtr()) {
-    current = sensor::takeReport(current);
-    LapMetrics lm = calculateLaps(current->last);
-    sendControlChange(lm.midiVelocity);
-    calibration::adjustWeights(lm.laps);
+  if (!logging && Serial && Serial.dtr()) {
+    printHeader();
   }
+  logging = Serial.dtr();
 
-  printHeader();
-  while (Serial.dtr()) {
-    current = sensor::takeReport(current);
-    LapMetrics lm = calculateLaps(current->last);
-    sendControlChange(lm.midiVelocity);
-    calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
-    printLine(lm, wm, *current);
+  current = sensor::takeReport(current);
+  LapMetrics lm = calculateLaps(current->last);
+  midiOut::sendControlChange(lm.midiVelocity);
+  calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
+
+  BassReadings readings = pollBoards();
+  bool noteChanged = chordChannel.sendChord(readings.chord) || bassChannel.sendChord(readings.bass);
+
+  if (logging) {
+    printLine(lm, wm, *current, readings);
+
+    if (noteChanged) {
+      Serial.print("# ");
+      readings.chord.printTo(Serial);
+      Serial.println();
+      Serial.flush();
+    }
   }
 }
 
