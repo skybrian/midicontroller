@@ -38,7 +38,7 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
 
     lm.smoothDelta = smoothDelta.update(lm.adjustedDelta);
 
-    lm.midiVelocity = calibration::calibrated() ? floor(abs(lm.smoothDelta) * 1.5) : 0;
+    lm.midiVelocity = calibration::calibrated() ? floor(abs(lm.smoothDelta) * 128.0) : 0;
     return lm;
 }
 

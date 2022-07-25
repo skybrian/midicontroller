@@ -47,16 +47,27 @@ public:
   }
 };
 
+const int highControl = 1;
+const int lowControl = highControl + 32;
+const int maxControlValue = (1 << 14) - 1;
+
 void __not_in_flash_func(sendControlChange)(int value) {
+  // Sends a 14-bit control change.
+  // This is sent in two messages with 7 bits each, highest bits first.
+  // (This may cause a glitch in some cases.)
+  // See discussion at: https://community.vcvrack.com/t/14-bit-midi-in-1-0/1779/86
   if (value < 0) value = 0;
-  if (value > 127) value = 127;
-  midi::DataByte val = value;
-  if (val == prevControlValue) {
+  if (value > maxControlValue) value = maxControlValue;
+  if (value == prevControlValue) {
     return;
   }
   //Serial.println(val);
-  MID.sendControlChange(1, val, 1);
-  prevControlValue = val;
+
+  midi::DataByte lo = value & 0x7f;
+  midi::DataByte hi = value >> 7;
+  MID.sendControlChange(highControl, hi, 1);
+  MID.sendControlChange(lowControl, lo, 1);
+  prevControlValue = value;
 }
 
 } // namespace
