@@ -4,6 +4,7 @@ namespace sensor {
 
 const int aSensorPin = A0;
 const int bSensorPin = A1;
+const int powerPin = 15;
 
 // times in microseconds
 const int samplePeriod = 1000;
@@ -20,6 +21,8 @@ static Report buffer1;
 void begin() {
   dest = &buffer1;
   rp2040.fifo.push(READY);
+  pinMode(powerPin, OUTPUT);
+  digitalWrite(powerPin, HIGH);
 }
 
 Report* __not_in_flash_func(takeReport)(Report* nextDest) {
