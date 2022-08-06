@@ -5,6 +5,8 @@
 #include <elapsedMillis.h>
 #include <math.h>
 
+#include "pins.h"
+
 #include "sensor.h"
 #include "calibration.h"
 #include "filters.h"
@@ -13,8 +15,6 @@
 #include "bassmaps.h"
 #include "midi_out.h"
 
-const int dataPin = 0;
-const int clockPin = 1;
 const int boardCount = 2;
 
 struct LapMetrics {
@@ -143,6 +143,8 @@ void setup() {
   Wire.setSDA(dataPin);
   Wire.setSCL(clockPin);
   Wire.setTimeout(50);
+  pinMode(powerPin, OUTPUT);
+  digitalWrite(powerPin, HIGH);
 
   for (int b = 0; b < boardCount; b++) {
     boards[b].begin();

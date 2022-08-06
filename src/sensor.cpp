@@ -1,10 +1,7 @@
 #include "sensor.h"
+#include "pins.h"
 
 namespace sensor {
-
-const int aSensorPin = A0;
-const int bSensorPin = A1;
-const int powerPin = 15;
 
 // times in microseconds
 const int samplePeriod = 1000;
