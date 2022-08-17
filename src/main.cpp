@@ -89,7 +89,7 @@ midiOut::Channel<chordVelocity> chordChannel(2);
 midiOut::Channel<bassVelocity> bassChannel(3);
 midiOut::Channel<chordVelocity> bellowsChannel(4);
 
-const int bellowsControl = 7; // volume
+const int bellowsControl = 2; // "breath control"
 
 void printHeader() {
   Serial.println("\nMIDIVelocity,Airflow,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
