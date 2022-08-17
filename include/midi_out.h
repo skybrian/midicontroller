@@ -47,9 +47,20 @@ public:
     prev = music::Chord();
   }
 
+  // Sends a 7-bit control change.
+  void __not_in_flash_func(sendControlChange)(int control, int value) {
+    if (value < 0) value = 0;
+    if (value > 127) value = 127;
+    if (value == prevControlValue) {
+      return;
+    }
+    MID.sendControlChange(control, value, chan);
+    prevControlValue = value;
+  }
+
   // Sends a 14-bit control change using two control numbers.
   // The lowest 7 bits will be sent in control + 32.
-  void __not_in_flash_func(sendControlChange)(int control, int value) {
+  void __not_in_flash_func(send14BitControlChange)(int control, int value) {
     // This is sent in two messages with 7 bits each, highest bits first.
     // (This may cause a glitch in some cases.)
     // See discussion at: https://community.vcvrack.com/t/14-bit-midi-in-1-0/1779/86

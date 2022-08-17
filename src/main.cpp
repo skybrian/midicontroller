@@ -9,7 +9,6 @@
 
 #include "sensor.h"
 #include "calibration.h"
-#include "filters.h"
 
 #include "bassboard.h"
 #include "bassmaps.h"
@@ -21,24 +20,42 @@ struct LapMetrics {
   float laps;
   float adjustedLaps;
   float adjustedDelta;
-  float smoothDelta;
+  float airflow;
   int midiVelocity;
 };
 
+const float maxLeakage = 0.01;
+const float pressureDecay = 0.96;
+
+float pressure = 0;
 float prevAdjustedLaps = nanf("");
-MovingAverageFilter<15> smoothDelta;
 
 LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
     lm.laps = reading.laps + reading.theta / ((float)sensor::ticksPerTurn);
 
     lm.adjustedLaps = calibration::adjustLaps(lm.laps);
-    lm.adjustedDelta = (lm.adjustedLaps - prevAdjustedLaps) * 360.0;
+    float lapsChange = lm.adjustedLaps - prevAdjustedLaps;
+    lm.adjustedDelta = lapsChange * 360.0;
     prevAdjustedLaps = lm.adjustedLaps;
 
-    lm.smoothDelta = smoothDelta.update(lm.adjustedDelta);
+    if (lapsChange > -1 && lapsChange < 1) {
+      pressure += lapsChange;
+    }
 
-    lm.midiVelocity = calibration::calibrated() ? floor(abs(lm.smoothDelta) * 128.0) : 0;
+    if (fabs(pressure) < maxLeakage) {
+      pressure = 0;
+    } else {
+      pressure += (pressure > 0) ? -maxLeakage : maxLeakage;
+    }
+
+    pressure *= pressureDecay;
+    lm.airflow = fabs(pressure);
+
+    lm.midiVelocity = calibration::calibrated() ? floor(fabs(lm.airflow) * 10.0) : 0;
+    if (lm.midiVelocity > 127) {
+      lm.midiVelocity = 127;
+    }
     return lm;
 }
 
@@ -75,7 +92,7 @@ midiOut::Channel<chordVelocity> bellowsChannel(4);
 const int bellowsControl = 7; // volume
 
 void printHeader() {
-  Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
+  Serial.println("\nMIDIVelocity,Airflow,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
       "chordNotesOn,bassNotesOn,"
       "jitter,aReadTime,bReadTime,totalReadTime,maxJitter,minIdle,sendTime");
   Serial.flush();
@@ -83,7 +100,7 @@ void printHeader() {
 
 void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Report r, BassReadings& br) {
   Serial.print(lm.midiVelocity); Serial.print(", ");
-  Serial.print(lm.smoothDelta); Serial.print(", ");
+  Serial.print(lm.airflow, 4); Serial.print(", ");
   Serial.print(lm.adjustedDelta); Serial.print(", ");
   Serial.print(lm.adjustedLaps, 4); Serial.print(", ");
   Serial.print(lm.laps, 4); Serial.print(", ");
