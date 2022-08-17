@@ -26,7 +26,7 @@ struct LapMetrics {
 };
 
 float prevAdjustedLaps = nanf("");
-MovingAverageFilter<9> smoothDelta;
+MovingAverageFilter<15> smoothDelta;
 
 LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
@@ -68,8 +68,11 @@ midi::DataByte bassVelocity(music::Note n) {
   return 100;
 }
 
-midiOut::Channel<chordVelocity> chordChannel(1);
-midiOut::Channel<bassVelocity> bassChannel(2);
+midiOut::Channel<chordVelocity> chordChannel(2);
+midiOut::Channel<bassVelocity> bassChannel(3);
+midiOut::Channel<chordVelocity> bellowsChannel(4);
+
+const int bellowsControl = 7; // volume
 
 void printHeader() {
   Serial.println("\nMIDIVelocity,SmoothDelta,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
@@ -162,7 +165,7 @@ void loop() {
 
   current = sensor::takeReport(current);
   LapMetrics lm = calculateLaps(current->last);
-  midiOut::sendControlChange(lm.midiVelocity);
+  bellowsChannel.sendControlChange(bellowsControl, lm.midiVelocity);
   calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
 
   BassReadings readings = pollBoards();
