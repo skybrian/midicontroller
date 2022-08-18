@@ -30,6 +30,12 @@ const float pressureDecay = 0.96;
 float pressure = 0;
 float prevAdjustedLaps = nanf("");
 
+float __not_in_flash_func(bellowsResponse)(float x) {
+  if (x >= 12) return 127;
+  x -= 12;
+  return 127-0.7*(x*x)+2*x;
+}
+
 LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     LapMetrics lm;
     lm.laps = reading.laps + reading.theta / ((float)sensor::ticksPerTurn);
@@ -52,7 +58,7 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     pressure *= pressureDecay;
     lm.airflow = fabs(pressure);
 
-    lm.midiValue = calibration::calibrated() ? floor(fabs(lm.airflow) * 10.0) : 0;
+    lm.midiValue = calibration::calibrated() ? floor(bellowsResponse(fabs(lm.airflow))) : 0;
     if (lm.midiValue > 127) {
       lm.midiValue = 127;
     }
