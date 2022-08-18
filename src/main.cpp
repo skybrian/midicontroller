@@ -21,7 +21,7 @@ struct LapMetrics {
   float adjustedLaps;
   float adjustedDelta;
   float airflow;
-  int midiVelocity;
+  int midiValue;
 };
 
 const float maxLeakage = 0.01;
@@ -52,9 +52,9 @@ LapMetrics __not_in_flash_func(calculateLaps)(sensor::Reading reading) {
     pressure *= pressureDecay;
     lm.airflow = fabs(pressure);
 
-    lm.midiVelocity = calibration::calibrated() ? floor(fabs(lm.airflow) * 10.0) : 0;
-    if (lm.midiVelocity > 127) {
-      lm.midiVelocity = 127;
+    lm.midiValue = calibration::calibrated() ? floor(fabs(lm.airflow) * 10.0) : 0;
+    if (lm.midiValue > 127) {
+      lm.midiValue = 127;
     }
     return lm;
 }
@@ -85,21 +85,21 @@ midi::DataByte bassVelocity(music::Note n) {
   return 100;
 }
 
+midiOut::Channel<chordVelocity> trebleChannel(1);
 midiOut::Channel<chordVelocity> chordChannel(2);
 midiOut::Channel<bassVelocity> bassChannel(3);
-midiOut::Channel<chordVelocity> bellowsChannel(4);
 
 const int bellowsControl = 2; // "breath control"
 
 void printHeader() {
-  Serial.println("\nMIDIVelocity,Airflow,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
+  Serial.println("\nMIDIValue,Airflow,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
       "chordNotesOn,bassNotesOn,"
       "jitter,aReadTime,bReadTime,totalReadTime,maxJitter,minIdle,sendTime");
   Serial.flush();
 }
 
 void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm, sensor::Report r, BassReadings& br) {
-  Serial.print(lm.midiVelocity); Serial.print(", ");
+  Serial.print(lm.midiValue); Serial.print(", ");
   Serial.print(lm.airflow, 4); Serial.print(", ");
   Serial.print(lm.adjustedDelta); Serial.print(", ");
   Serial.print(lm.adjustedLaps, 4); Serial.print(", ");
@@ -182,7 +182,9 @@ void loop() {
 
   current = sensor::takeReport(current);
   LapMetrics lm = calculateLaps(current->last);
-  bellowsChannel.sendControlChange(bellowsControl, lm.midiVelocity);
+  trebleChannel.sendControlChange(bellowsControl, lm.midiValue);
+  chordChannel.sendControlChange(bellowsControl, lm.midiValue);
+  bassChannel.sendControlChange(bellowsControl, lm.midiValue);
   calibration::WeightMetrics wm = calibration::adjustWeights(lm.laps);
 
   BassReadings readings = pollBoards();
