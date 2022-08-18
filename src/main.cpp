@@ -89,7 +89,7 @@ midiOut::Channel<chordVelocity> trebleChannel(1);
 midiOut::Channel<chordVelocity> chordChannel(2);
 midiOut::Channel<bassVelocity> bassChannel(3);
 
-const int bellowsControl = 2; // "breath control"
+const int bellowsControl = 1; // mod wheel
 
 void printHeader() {
   Serial.println("\nMIDIValue,Airflow,AdjustedDelta,AdjustedLaps,Laps,WeightUpdates,Bin,binWeight,binAdjustment,a,b,theta,thetaChange,"
