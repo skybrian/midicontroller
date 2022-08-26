@@ -135,8 +135,8 @@ void __not_in_flash_func(printLine)(LapMetrics lm, calibration::WeightMetrics wm
 }
 
 bassboard::Board boards[boardCount] = {
-  bassboard::Board("lower", Wire, 32, &bassmaps::lowerChord, &bassmaps::lowerBass),
-  bassboard::Board("upper", Wire, 33, &bassmaps::upperChord, &bassmaps::upperBass)
+  bassboard::Board("lower", Wire, 32, &bassmaps::lowerChordCustom, &bassmaps::lowerBass),
+  bassboard::Board("upper", Wire, 33, &bassmaps::upperChordCustom, &bassmaps::upperBass)
 };
 
 elapsedMillis sinceValidRead;

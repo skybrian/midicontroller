@@ -58,11 +58,20 @@ private:
 
 // Octave number in constants increments at C.
 // See: https://en.wikipedia.org/wiki/Scientific_pitch_notation
-// Midi charts may label notes differently!
+// Midi charts may label notes differently! (Yamaha uses C3 for middle C.)
 
-constexpr Note G1 = 31;
+constexpr Note MiddleC = 60;
+constexpr Note C4 = MiddleC;
 
-constexpr Note C2 = G1 + 5;
+constexpr Note C1 = MiddleC - 12*3;
+constexpr Note D1 = C1 + 2;
+constexpr Note E1 = D1 + 2;
+constexpr Note F1 = E1 + 1;
+constexpr Note G1 = F1 + 2;
+constexpr Note A1 = G1 + 2;
+constexpr Note B1 = A1 + 2;
+
+constexpr Note C2 = C1 + 12;
 constexpr Note D2 = C2 + 2;
 constexpr Note E2 = D2 + 2;
 constexpr Note F2 = E2 + 1;
@@ -70,7 +79,7 @@ constexpr Note G2 = F2 + 2;
 constexpr Note A2 = G2 + 2;
 constexpr Note B2 = A2 + 2;
 
-constexpr Note C3 = B2 + 1;
+constexpr Note C3 = C2 + 12;
 constexpr Note D3 = C3 + 2;
 constexpr Note E3 = D3 + 2;
 constexpr Note F3 = E3 + 1;
@@ -80,7 +89,7 @@ constexpr Note B3 = A3 + 2;
 
 // 128 bits would cover the entire MIDI range, but just using 64 will do.
 
-constexpr Note ChordBase = G1;
+constexpr Note ChordBase = C1;
 constexpr Note ChordLimit = ChordBase + 64;
 
 class Chord {
